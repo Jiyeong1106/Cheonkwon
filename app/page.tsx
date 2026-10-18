@@ -1,69 +1,135 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Pass = { id: string; start: string; months: number; weekly: number };
+type Member = { id: string; name: string; phone: string; memo: string; created: string; passes: Pass[] };
+type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
+type Schedule = { id: string; day: number; time: string };
+type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[] };
+type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "notifications" | null;
+
+const STORE_KEY = "cheonkwon-mvp-v1";
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+const defaultStore: Store = { members: [], attendance: [], schedules: [1,2,3,4,5].flatMap(day=>["19:00","20:00","21:00"].map(time=>({id:`default-${day}-${time}`,day,time}))).concat([{id:"default-6-11:00",day:6,time:"11:00"}]) };
+const weekdayNames = ["일", "월", "화", "수", "목", "금", "토"];
+const moneylessDate = (date: string) => date ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(`${date}T12:00:00+09:00`)) : "-";
+const addMonths = (date: string, months: number) => { const [year,month,day]=date.split("-").map(Number); const target=new Date(Date.UTC(year,month-1+months,1)); const last=new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth()+1,0)).getUTCDate(); return `${target.getUTCFullYear()}-${String(target.getUTCMonth()+1).padStart(2,"0")}-${String(Math.min(day,last)).padStart(2,"0")}`; };
+const id = () => Math.random().toString(36).slice(2, 10);
+const activePass = (m: Member, date: string) => m.passes.filter(p => p.start <= date && addMonths(p.start, p.months) >= date).sort((a,b) => b.start.localeCompare(a.start))[0];
+const periodStart = (p: Pass, date: string) => { let start = p.start; while (addMonths(start, 1) <= date) start = addMonths(start, 1); return start; };
+const monthAttendance = (store: Store, m: Member, p: Pass, date: string) => store.attendance.filter(a => a.memberId === m.id && a.passId === p.id && a.date >= periodStart(p, date) && a.date < addMonths(periodStart(p,date),1)).length;
+const statusFor = (m: Member, date: string) => { const p=activePass(m,date); if(p) return "이용 중"; return m.passes.length ? "만료" : "미등록"; };
+const fmtPhone = (a:string,b:string,c:string) => [a,b,c].filter(Boolean).join("-");
+const getDay = (date:string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+
+function Icon({ name }: { name: string }) {
+  const paths: Record<string,string> = { grid:"M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z", users:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M23 11h-6", check:"M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", calendar:"M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z", search:"M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z M21 21l-4.35-4.35", bell:"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4", arrow:"M5 12h14 M12 5l7 7-7 7", plus:"M12 5v14 M5 12h14", close:"M18 6 6 18 M6 6l12 12", clock:"M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", edit:"M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z", chevron:"m9 18 6-6-6-6", help:"M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", shield:"M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" };
+  return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.grid}/></svg>;
+}
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+  const [store,setStore]=useState<Store>(defaultStore);
+  const [loaded,setLoaded]=useState(false);
+  const [view,setView]=useState<"dashboard"|"members"|"attendance"|"detail">("dashboard");
+  const [selected,setSelected]=useState<string|null>(null);
+  const [editingPassId,setEditingPassId]=useState<string|null>(null);
+  const [dialog,setDialog]=useState<Dialog>(null);
+  const [search,setSearch]=useState("");
+  const [filter,setFilter]=useState("전체 회원");
+  const [currentDate,setCurrentDate]=useState("2026-10-18");
+  const [attendanceDate,setAttendanceDate]=useState("2026-10-18");
+  const [timeFilter,setTimeFilter]=useState("전체");
+  const [nameFilter,setNameFilter]=useState("");
+  const [mobileMenu,setMobileMenu]=useState(false);
+  const [form,setForm]=useState({name:"",phone1:"",phone2:"",phone3:"",memo:"",start:"2026-10-18",weekly:"3",months:"3"});
+  const [scheduleDay,setScheduleDay]=useState("1");
+  const [scheduleTime,setScheduleTime]=useState("19:00");
+  const [toast,setToast]=useState("");
+
+  useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date})); try { const saved=localStorage.getItem(STORE_KEY); if(saved) setStore(JSON.parse(saved)); } catch {} setLoaded(true); },[]);
+  useEffect(()=>{ if(loaded) localStorage.setItem(STORE_KEY,JSON.stringify(store)); },[store,loaded]);
+  useEffect(()=>{ if(!toast)return; const timer=setTimeout(()=>setToast(""),2800); return ()=>clearTimeout(timer); },[toast]);
+  useEffect(()=>{ const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")setDialog(null)}; window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey); },[]);
+
+  const selectedMember=store.members.find(m=>m.id===selected) || null;
+  const sorted=useMemo(()=>store.members.slice().sort((a,b)=>a.name.localeCompare(b.name,"ko")),[store.members]);
+  const dateDay=getDay(attendanceDate);
+  const schedules=useMemo(()=>store.schedules.filter(s=>s.day===dateDay).sort((a,b)=>a.time.localeCompare(b.time)),[store.schedules,dateDay]);
+  const filteredMembers=sorted.filter(m=>{
+    const matches=`${m.name} ${m.phone}`.includes(search.trim());
+    const state=statusFor(m,currentDate);
+    return matches && (filter==="전체 회원" || (filter==="이용 중"&&state==="이용 중") || (filter==="만료"&&state==="만료"));
+  });
+  const attendancePool=sorted.filter(m=>activePass(m,attendanceDate));
+  const selectedSessions=(m:Member)=>store.attendance.find(a=>a.memberId===m.id&&a.date===attendanceDate)?.sessions||[];
+  const attendanceMembers=attendancePool.filter(m=>!nameFilter||m.name.includes(nameFilter));
+  const attended=attendanceMembers.filter(m=>timeFilter==="전체"?selectedSessions(m).length>0:selectedSessions(m).includes(timeFilter));
+  const absent=attendanceMembers.filter(m=>timeFilter==="전체"?selectedSessions(m).length===0:!selectedSessions(m).includes(timeFilter));
+  const todayRecords=store.attendance.filter(a=>a.date===currentDate);
+  const expiring=store.members.filter(m=>{const p=activePass(m,currentDate); if(!p)return false;const remain=(new Date(`${addMonths(p.start,p.months)}T12:00:00+09:00`).getTime()-new Date(`${currentDate}T12:00:00+09:00`).getTime())/86400000; return remain>=0&&remain<=7;});
+  const monthCount=store.attendance.filter(a=>a.date.slice(0,7)===currentDate.slice(0,7)).length;
+  const activeCount=store.members.filter(m=>!!activePass(m,currentDate)).length;
+  const go=(v:typeof view)=>{setView(v);setMobileMenu(false);setSelected(null)};
+  const showMember=(m:Member)=>{setSelected(m.id);setView("detail")};
+  const resetForm=()=>setForm({name:"",phone1:"",phone2:"",phone3:"",memo:"",start:currentDate,weekly:"3",months:"3"});
+  const openNew=()=>{resetForm();setDialog("member")};
+  const saveNew=()=>{if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}const member:Member={id:id(),name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim(),created:currentDate,passes:[{id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)}]};setStore(s=>({...s,members:[...s.members,member]}));setDialog(null);setToast("새 회원을 등록했어요.")};
+  const openEdit=(m:Member)=>{const parts=m.phone.split("-");setForm({...form,name:m.name,phone1:parts[0]||"",phone2:parts[1]||"",phone3:parts[2]||"",memo:m.memo});setDialog("edit")};
+  const saveEdit=()=>{if(!selectedMember)return;if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim()}:m)}));setDialog(null);setToast("회원 정보를 수정했어요.")};
+  const addPass=()=>{if(!selectedMember)return;const p:Pass={id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)};setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,passes:[...m.passes,p]}:m)}));setDialog(null);setToast("새 이용권을 등록했어요.")};
+  const openPassEdit=(pass:Pass)=>{setEditingPassId(pass.id);setForm(f=>({...f,start:pass.start,weekly:String(pass.weekly),months:String(pass.months)}));setDialog("passEdit")};
+  const savePassEdit=()=>{if(!selectedMember||!editingPassId)return;setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,passes:m.passes.map(p=>p.id===editingPassId?{...p,start:form.start,weekly:Number(form.weekly),months:Number(form.months)}:p)}:m)}));setDialog(null);setToast("이용권 정보를 수정했어요.")};
+  const attendanceToggle=(m:Member,time:string)=>{const pass=activePass(m,attendanceDate);if(!pass)return;const used=monthAttendance(store,m,pass,attendanceDate);const existing=store.attendance.find(a=>a.memberId===m.id&&a.date===attendanceDate);if(!existing&&used>=pass.weekly*4){setToast(`${m.name} 회원의 이번 이용 기간 횟수를 모두 사용했어요.`);return}if(existing?.sessions.includes(time)){const sessions=existing.sessions.filter(t=>t!==time);setStore(s=>({...s,attendance:s.attendance.flatMap(a=>a.id!==existing.id?[a]:sessions.length?[{...a,sessions}]:[])}));return}if(existing){setStore(s=>({...s,attendance:s.attendance.map(a=>a.id===existing.id?{...a,sessions:[...a.sessions,time].sort()}:a)}))}else setStore(s=>({...s,attendance:[...s.attendance,{id:id(),memberId:m.id,date:attendanceDate,passId:pass.id,sessions:[time]}]}))};
+  const cancelDay=()=>{const count=store.attendance.filter(a=>a.date===attendanceDate).length;if(!count)return;if(!window.confirm(`${attendanceDate}의 출석 ${count}건을 모두 취소할까요?`))return;setStore(s=>({...s,attendance:s.attendance.filter(a=>a.date!==attendanceDate)}));setToast("선택한 날짜의 출석을 모두 취소했어요.")};
+  const addSchedule=()=>{if(store.schedules.some(s=>s.day===Number(scheduleDay)&&s.time===scheduleTime)){setToast("이미 등록된 수업 시간이에요.");return}setStore(s=>({...s,schedules:[...s.schedules,{id:id(),day:Number(scheduleDay),time:scheduleTime}].sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time))}));setToast("수업 시간을 추가했어요.")};
+  const removeSchedule=(sid:string)=>setStore(s=>({...s,schedules:s.schedules.filter(x=>x.id!==sid)}));
+
+  const pageTitle=view==="dashboard"?"대시보드":view==="members"?"회원 관리":view==="attendance"?"출석 체크":"회원 상세";
+  const breadcrumb=<div className="breadcrumb"><button onClick={()=>go("dashboard")}>천권태권도</button>{view!=="dashboard"&&<><span>/</span>{view==="detail"?<><button onClick={()=>go("members")}>회원목록</button><span>/</span><span>회원상세</span></>:<span>{view==="attendance"?"출석 체크":"회원목록"}</span>}</>}</div>;
+  const memberRow=(m:Member,compact=false)=><tr key={m.id} className="click-row" onClick={()=>showMember(m)} tabIndex={0} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();showMember(m)}}}><td><div className="person-cell"><div className="avatar">{m.name.slice(0,1)}</div><div><strong>{m.name}</strong><small>{m.phone||"전화번호 미등록"}</small></div></div></td><td>{activePass(m,currentDate)?`주 ${activePass(m,currentDate)!.weekly}회`:m.passes.length?"이용권 없음":"미등록"}</td><td>{activePass(m,currentDate)?`${moneylessDate(activePass(m,currentDate)!.start)} – ${moneylessDate(addMonths(activePass(m,currentDate)!.start,activePass(m,currentDate)!.months))}`:"-"}</td><td>{(()=>{const p=activePass(m,currentDate);return p?`${monthAttendance(store,m,p,currentDate)} / ${p.weekly*4}회`:"-"})()}</td><td><span className={`badge ${statusFor(m,currentDate)==="이용 중"?"blue":"muted"}`}>{statusFor(m,currentDate)}</span></td>{!compact&&<td><button className="icon-button small" aria-label={`${m.name} 상세`} onClick={e=>{e.stopPropagation();showMember(m)}}><Icon name="chevron"/></button></td>}</tr>;
+
+  return <div className="app-shell">
+    <aside className={`sidebar ${mobileMenu?"open":""}`}>
+      <button className="brand" onClick={()=>go("dashboard")}><span className="brand-mark">천</span><span>천권태권도장</span></button>
+      <div className="dojo-card"><div className="dojo-avatar">천</div><div><strong>천권태권도</strong><small>운영 도장</small></div><span className="online-dot"/></div>
+      <div className="nav-label">메뉴</div>
+      <nav className="side-nav"><button className={view==="dashboard"?"active":""} onClick={()=>go("dashboard")}><Icon name="grid"/>대시보드</button><button className={view==="members"||view==="detail"?"active":""} onClick={()=>go("members")}><Icon name="users"/>회원 관리</button><button className={view==="attendance"?"active":""} onClick={()=>go("attendance")}><Icon name="check"/>출석 체크</button></nav>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><div className="account"><div className="account-avatar">관</div><div><strong>관장님</strong><small>천권태권도</small></div><span className="more">···</span></div></div>
+    </aside>
+    {mobileMenu&&<button className="scrim nav-scrim" onClick={()=>setMobileMenu(false)} aria-label="메뉴 닫기"/>}
+    <main className="main-area">
+      <header className="topbar"><button className="menu-toggle icon-button" onClick={()=>setMobileMenu(true)} aria-label="메뉴 열기">☰</button>{breadcrumb}<div className="top-actions"><span className="today-label">{new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(`${currentDate}T12:00:00+09:00`))}</span><button className="icon-button notification-button" aria-label="알림" onClick={()=>setDialog("notifications")}><Icon name="bell"/></button><button className="profile-button" onClick={()=>setDialog("notifications")}>관</button></div></header>
+      <div className="page-content"><div className="page-heading"><div><div className="eyebrow">CHEONKWON TAEKWONDO</div><h1>{pageTitle}</h1>{view==="dashboard"?<p>오늘도 활기찬 하루, 도장 운영 현황을 확인해 보세요.</p>:view==="members"?<p>회원 정보와 이용권 현황을 한눈에 관리할 수 있어요.</p>:view==="attendance"?<p>오늘의 수업 출석을 빠르고 간편하게 체크해 보세요.</p>:null}</div><div className="heading-actions">{view==="dashboard"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}{view==="members"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}</div></div>
+      {view==="dashboard"&&<>
+        <section className="stats-grid"><Stat icon="users" label="전체 회원" value={`${store.members.length}`} suffix="명" detail="등록된 전체 회원"/><Stat icon="shield" label="이용 중 회원" value={`${activeCount}`} suffix="명" detail="현재 이용권이 유효해요" tone="blue"/><Stat icon="check" label="오늘 출석" value={`${todayRecords.length}`} suffix="명" detail={`${todayRecords.reduce((n,a)=>n+a.sessions.length,0)}개 수업 참여`}/><Stat icon="calendar" label="만료 예정" value={`${expiring.length}`} suffix="명" detail="7일 이내 이용권 만료" tone="amber"/></section>
+        <div className="dashboard-grid"><section className="panel attendance-panel"><div className="panel-heading"><div><h2>오늘의 출석</h2><p>{moneylessDate(currentDate)} · {weekdayNames[getDay(currentDate)]}요일</p></div><button className="text-link" onClick={()=>go("attendance")}>전체 보기 <Icon name="arrow"/></button></div>{todayRecords.length?<div className="mini-list">{todayRecords.slice(0,5).map(a=>{const m=store.members.find(x=>x.id===a.memberId);const p=m?.passes.find(x=>x.id===a.passId);return m?<div className="mini-row" key={a.id}><div className="avatar">{m.name[0]}</div><div className="mini-main"><strong>{m.name}</strong><small>{a.sessions.join(" · ")}</small></div><div className="usage"><strong>{p?monthAttendance(store,m,p,currentDate):0}<span> / {p?p.weekly*4:0}</span></strong><small>이번 기간</small></div></div>:null})}</div>:<Empty compact title="오늘 출석한 회원이 없어요" action="출석 체크하기" onClick={()=>go("attendance")}/>}</section>
+          <section className="panel expiring-panel"><div className="panel-heading"><div><h2>이용권 만료 예정</h2><p>앞으로 7일 이내 만료되는 회원</p></div><span className="soft-count">{expiring.length}명</span></div>{expiring.length?<div className="mini-list">{expiring.slice(0,5).map(m=>{const p=activePass(m,currentDate)!;const remain=Math.max(0,Math.ceil((new Date(`${addMonths(p.start,p.months)}T12:00:00+09:00`).getTime()-new Date(`${currentDate}T12:00:00+09:00`).getTime())/86400000));return <div className="mini-row" key={m.id}><div className="avatar pale">{m.name[0]}</div><div className="mini-main"><strong>{m.name}</strong><small>주 {p.weekly}회 · {p.months}개월</small></div><span className="remaining">{remain===0?"오늘 만료":`${remain}일 남음`}</span></div>})}</div>:<Empty compact title="만료 예정 이용권이 없어요"/>}</section></div>
+        <section className="panel recent-panel"><div className="panel-heading"><div><h2>최근 회원</h2><p>회원별 이용권과 출석 현황을 확인해 보세요.</p></div><button className="text-link" onClick={()=>go("members")}>회원 전체 보기 <Icon name="arrow"/></button></div><Table>{sorted.length?sorted.slice(0,6).map(m=>memberRow(m,true)):<tr><td colSpan={5}><Empty title="등록된 회원이 아직 없어요" action="첫 회원 등록하기" onClick={openNew}/></td></tr>}</Table></section>
+        <section className="panel month-strip"><div className="month-icon"><Icon name="calendar"/></div><div><strong>이번 달 출석 횟수</strong><small>{currentDate.slice(0,4)}년 {Number(currentDate.slice(5,7))}월 누적 출석</small></div><b>{monthCount}<span>회</span></b></section>
+      </>}
+      {view==="members"&&<section className="panel members-panel"><div className="toolbar"><div className="search-box"><Icon name="search"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름 또는 전화번호 검색"/></div><div className="toolbar-right"><label className="select-wrap"><select value={filter} onChange={e=>setFilter(e.target.value)}><option>전체 회원</option><option>이용 중</option><option>만료</option></select></label><span className="result-count">총 <b>{filteredMembers.length}</b>명</span></div></div><Table>{filteredMembers.length?filteredMembers.map(m=>memberRow(m)):<tr><td colSpan={6}><Empty title={sorted.length?"검색 결과가 없어요":"등록된 회원이 아직 없어요"} action={sorted.length?undefined:"첫 회원 등록하기"} onClick={sorted.length?undefined:openNew}/></td></tr>}</Table><div className="table-foot">회원 이름을 가나다순으로 보여드려요.</div></section>}
+      {view==="detail"&&selectedMember&&<MemberDetail member={selectedMember} store={store} currentDate={currentDate} onBack={()=>go("members")} onEdit={()=>openEdit(selectedMember)} onAddPass={()=>{setForm(f=>({...f,start:currentDate}));setDialog("pass")}} onEditPass={openPassEdit} onAttendance={()=>go("attendance")}/>}
+      {view==="attendance"&&<><section className="panel attendance-tools"><div className="attendance-date"><div><span className="field-label">출석 날짜</span><label className="date-input"><Icon name="calendar"/><input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)}/></label><span className="date-weekday">{weekdayNames[dateDay]}요일 수업</span></div><div className="attendance-buttons"><button className="button secondary" onClick={()=>setDialog("schedule")}><Icon name="clock"/>수업 시간 관리</button><button className="button danger-light" onClick={cancelDay}>전체 취소</button></div></div><div className="time-filters"><button className={timeFilter==="전체"?"selected":""} onClick={()=>setTimeFilter("전체")}>전체</button>{schedules.map(s=><button key={s.id} className={timeFilter===s.time?"selected":""} onClick={()=>setTimeFilter(s.time)}>{s.time}</button>)}{schedules.length===0&&<span className="no-classes">등록된 수업 시간이 없어요. 수업 시간 관리에서 추가해 주세요.</span>}</div></section><div className="attendance-summary"><div><h2>{timeFilter==="전체"?"오늘의 회원 출석":`${timeFilter} 수업 출석`}</h2><p>출석 날짜 기준 유효한 이용권이 있는 회원이에요.</p></div><div className="attendance-search"><Icon name="search"/><input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="회원 이름 검색"/></div></div><div className="attendance-columns"><AttendanceColumn title="출석" count={attended.length} status="present">{attended.length?attended.map(m=><AttendanceCard key={m.id} member={m} sessions={selectedSessions(m)} schedules={schedules} onToggle={t=>attendanceToggle(m,t)} pass={activePass(m,attendanceDate)!} used={monthAttendance(store,m,activePass(m,attendanceDate)!,attendanceDate)}/>):<Empty compact title="아직 출석한 회원이 없어요"/>}</AttendanceColumn><AttendanceColumn title="미출석" count={absent.length} status="absent">{absent.length?absent.map(m=><AttendanceCard key={m.id} member={m} sessions={selectedSessions(m)} schedules={schedules} onToggle={t=>attendanceToggle(m,t)} pass={activePass(m,attendanceDate)!} used={monthAttendance(store,m,activePass(m,attendanceDate)!,attendanceDate)}/>):<Empty compact title="미출석 회원이 없어요"/>}</AttendanceColumn></div></>}
+      <footer className="footer"><span>© 2026 Cheonkwon</span><span>천권태권도장 회원 · 이용권 · 출석 관리</span></footer>
+      </div>
+    </main>
+    {dialog&&<div className="scrim modal-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null)}}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="modal-heading"><div><span className="eyebrow">CHEONKWON</span><h2 id="dialog-title">{dialog==="member"?"새 회원 등록":dialog==="edit"?"회원 정보 수정":dialog==="pass"?"이용권 추가":dialog==="passEdit"?"이용권 수정":dialog==="schedule"?"수업 시간 관리":dialog==="help"?"사용 안내":"알림"}</h2></div><button className="icon-button" aria-label="닫기" onClick={()=>setDialog(null)}><Icon name="close"/></button></div>
+      {(dialog==="member"||dialog==="edit"||dialog==="pass"||dialog==="passEdit")&&<div className="modal-body">{dialog!=="pass"&&dialog!=="passEdit"&&<><label className="form-field"><span>이름 <i>*</i></span><input autoFocus value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="회원 이름"/></label><div className="form-field"><span>전화번호</span><div className="phone-fields"><input inputMode="numeric" maxLength={3} value={form.phone1} onChange={e=>setForm(f=>({...f,phone1:e.target.value.replace(/\D/g,"").slice(0,3)}))} placeholder="010"/><b>-</b><input inputMode="numeric" maxLength={4} value={form.phone2} onChange={e=>setForm(f=>({...f,phone2:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="1111"/><b>-</b><input inputMode="numeric" maxLength={4} value={form.phone3} onChange={e=>setForm(f=>({...f,phone3:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="2222"/></div></div><label className="form-field"><span>메모</span><textarea value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))} placeholder="도장 운영에 필요한 메모를 입력하세요." rows={3}/></label></>}{dialog!=="edit"&&<><div className="form-divider">{dialog==="member"?"첫 이용권":dialog==="passEdit"?"이용권 정보 수정":"이용권 정보"}</div><label className="form-field"><span>시작일</span><input type="date" value={form.start} onChange={e=>setForm(f=>({...f,start:e.target.value}))}/></label><div className="form-row"><label className="form-field"><span>주간 횟수</span><Select value={form.weekly} onChange={v=>setForm(f=>({...f,weekly:v}))} options={["1","2","3","5","7"].map(v=>[v,`주 ${v}회`])}/></label><label className="form-field"><span>이용 기간</span><Select value={form.months} onChange={v=>setForm(f=>({...f,months:v}))} options={["1","2","3","6","12"].map(v=>[v,`${v}개월`])}/></label></div><p className="form-note">월 한도는 주간 횟수 × 4회로 계산됩니다. 남은 횟수는 다음 기간으로 이월되지 않아요.</p></>}</div>}
+      {dialog==="schedule"&&<div className="modal-body"><div className="schedule-form"><label className="form-field"><span>요일</span><Select value={scheduleDay} onChange={setScheduleDay} options={weekdayNames.map((v,i)=>[String(i),`${v}요일`])}/></label><label className="form-field"><span>수업 시간</span><input type="time" value={scheduleTime} onChange={e=>setScheduleTime(e.target.value)}/></label><button className="button primary add-schedule" onClick={addSchedule}><Icon name="plus"/>수업 추가</button></div><div className="schedule-list">{[0,1,2,3,4,5,6].map(day=>{const entries=store.schedules.filter(s=>s.day===day).sort((a,b)=>a.time.localeCompare(b.time));return entries.length?<div className="schedule-day" key={day}><strong>{weekdayNames[day]}요일</strong><div>{entries.map(s=><span className="schedule-chip" key={s.id}>{s.time}<button onClick={()=>removeSchedule(s.id)} aria-label={`${s.time} 삭제`}>×</button></span>)}</div></div>:null})}{!store.schedules.length&&<Empty compact title="등록된 수업 시간이 없어요"/>}</div></div>}
+      {dialog==="help"&&<div className="modal-body help-content"><div><b>01</b><section><strong>회원과 이용권 등록</strong><p>새 회원 등록에서 이름, 연락처와 첫 이용권을 함께 등록할 수 있어요. 재등록은 회원 상세에서 이용권 추가를 선택해 주세요.</p></section></div><div><b>02</b><section><strong>출석 체크</strong><p>날짜와 수업 시간대를 선택한 뒤 회원 카드의 수업 시간을 눌러 체크하세요. 같은 날 여러 수업을 들어도 이용 횟수는 하루 한 번만 차감됩니다.</p></section></div><div><b>03</b><section><strong>수업 시간 관리</strong><p>출석 체크 화면에서 요일과 시간을 추가하거나 삭제할 수 있어요.</p></section></div><div className="storage-note">현재 데이터는 이 브라우저에 저장됩니다.</div></div>}
+      {dialog==="notifications"&&<div className="modal-body"><div className="empty-state"><div className="empty-icon"><Icon name="bell"/></div><strong>새로운 알림이 없어요</strong><p>새 소식이 생기면 이곳에 알려드릴게요.</p></div></div>}
+      <div className="modal-footer">{dialog!=="schedule"&&dialog!=="help"&&dialog!=="notifications"&&<><button className="button secondary" onClick={()=>setDialog(null)}>취소</button><button className="button primary" onClick={dialog==="member"?saveNew:dialog==="edit"?saveEdit:dialog==="passEdit"?savePassEdit:addPass}>{dialog==="member"?"등록하기":dialog==="edit"?"수정하기":dialog==="passEdit"?"수정하기":"이용권 등록"}</button></>}{(dialog==="help"||dialog==="notifications")&&<button className="button secondary full" onClick={()=>setDialog(null)}>닫기</button>}{dialog==="schedule"&&<button className="button secondary full" onClick={()=>setDialog(null)}>완료</button>}</div>
+    </div></div>}
+    {toast&&<div className="toast" role="status">{toast}</div>}
+    {!loaded&&<div className="loading-overlay">도장 데이터를 불러오는 중이에요…</div>}
+  </div>;
 }
+
+function Stat({icon,label,value,suffix,detail,tone=""}:{icon:string;label:string;value:string;suffix:string;detail:string;tone?:string}){return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon name={icon}/></div><div className="stat-label">{label}</div><div className="stat-value">{value}<span>{suffix}</span></div><div className="stat-detail">{detail}</div></div>}
+function Table({children}:{children:React.ReactNode}){return <div className="table-scroll"><table><thead><tr><th>회원</th><th>이용권 조건</th><th>유효 기간</th><th>이번 기간 출석</th><th>상태</th><th aria-label="상세"/></tr></thead><tbody>{children}</tbody></table></div>}
+function Empty({title,action,onClick,compact=false}:{title:string;action?:string;onClick?:()=>void;compact?:boolean}){return <div className={`empty-state ${compact?"compact":""}`}><div className="empty-icon"><Icon name="users"/></div><strong>{title}</strong>{!compact&&<p>회원이 등록되면 이곳에서 현황을 확인할 수 있어요.</p>}{action&&<button className="button secondary" onClick={onClick}>{action}</button>}</div>}
+function Select({value,onChange,options}:{value:string;onChange:(v:string)=>void;options:string[][]}){return <label className="select-wrap"><select value={value} onChange={e=>onChange(e.target.value)}>{options.map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></label>}
+function AttendanceColumn({title,count,status,children}:{title:string;count:number;status:string;children:React.ReactNode}){return <section className={`panel attendance-column ${status}`}><div className="column-heading"><div><span className="status-dot"/><h3>{title}</h3><span className="column-count">{count}</span></div><button className="filter-mini"><Icon name="grid"/>필터</button></div><div className="attendance-list">{children}</div></section>}
+function AttendanceCard({member,sessions,schedules,onToggle,pass,used}:{member:Member;sessions:string[];schedules:Schedule[];onToggle:(t:string)=>void;pass:Pass;used:number}){return <div className="attendance-card"><div className="attendee-top"><div className="person-cell"><div className="avatar">{member.name[0]}</div><div><strong>{member.name}</strong><small>{member.phone||"전화번호 미등록"}</small></div></div><button className="icon-button small" aria-label={`${member.name} 상세`}><Icon name="chevron"/></button></div><div className="session-chips">{schedules.map(s=>{const active=sessions.includes(s.time);return <button key={s.id} className={`session-chip ${active?"active":""}`} onClick={()=>onToggle(s.time)}>{s.time}{active&&<span>×</span>}</button>})}</div><div className="attendee-foot"><span>주 {pass.weekly}회 이용권</span><span>이번 기간 <b>{used}/{pass.weekly*4}</b>회</span></div></div>}
+function MemberDetail({member,store,currentDate,onBack,onEdit,onAddPass,onEditPass,onAttendance}:{member:Member;store:Store;currentDate:string;onBack:()=>void;onEdit:()=>void;onAddPass:()=>void;onEditPass:(pass:Pass)=>void;onAttendance:()=>void}){const current=activePass(member,currentDate);const records=store.attendance.filter(a=>a.memberId===member.id).sort((a,b)=>b.date.localeCompare(a.date));const passStatus=(p:Pass)=>p.start>currentDate?"예정":addMonths(p.start,p.months)<currentDate?"만료":(new Date(`${addMonths(p.start,p.months)}T12:00:00+09:00`).getTime()-new Date(`${currentDate}T12:00:00+09:00`).getTime())/86400000<=7?"만료 임박":"이용 중";return <div className="detail-page"><button className="back-link" onClick={onBack}>← 회원 목록으로</button><section className="panel member-hero"><div className="hero-person"><div className="avatar large">{member.name[0]}</div><div><span className="badge blue">{statusFor(member,currentDate)}</span><h2>{member.name}</h2><p>{member.phone||"전화번호 미등록"}</p></div></div><div className="hero-actions"><button className="button secondary" onClick={onEdit}><Icon name="edit"/>회원 정보 수정</button><button className="button primary" onClick={onAddPass}><Icon name="plus"/>이용권 추가</button></div><div className="hero-meta"><div><span>전화번호</span><strong>{member.phone||"미등록"}</strong></div><div><span>이용권 수</span><strong>{member.passes.length}건</strong></div><div><span>누적 출석</span><strong>{records.length}회</strong></div><div><span>메모</span><strong>{member.memo||"메모 없음"}</strong></div></div></section><div className="detail-grid"><section className="panel current-pass"><div className="panel-heading"><div><h2>현재 이용권</h2><p>회원의 이용권과 이번 기간 사용량</p></div><span className="pass-icon"><Icon name="shield"/></span></div>{current?<><div className="current-pass-main"><div><span className="pass-kicker">WEEKLY PASS</span><h3>주 {current.weekly}회 <span>· {current.months}개월</span></h3></div><span className="badge blue">이용 중</span></div><div className="pass-dates"><div><span>시작일</span><strong>{moneylessDate(current.start)}</strong></div><div><span>종료일</span><strong>{moneylessDate(addMonths(current.start,current.months))}</strong></div></div><div className="usage-bar"><div><span>이번 이용 기간 사용량</span><b>{monthAttendance(store,member,current,currentDate)} <small>/ {current.weekly*4}회</small></b></div><span className="bar"><i style={{width:`${Math.min(100,monthAttendance(store,member,current,currentDate)/(current.weekly*4)*100)}%`}}/></span></div></>:<Empty compact title="현재 유효한 이용권이 없어요" action="이용권 추가" onClick={onAddPass}/>}</section><section className="panel member-note"><div className="panel-heading"><div><h2>회원 메모</h2><p>도장 운영 참고 사항</p></div><button className="icon-button small" onClick={onEdit} aria-label="메모 수정"><Icon name="edit"/></button></div><p className="note-text">{member.memo||"등록된 메모가 없습니다."}</p><button className="text-link" onClick={onAttendance}>출석 체크 바로가기 <Icon name="arrow"/></button></section></div><section className="panel history-panel"><div className="panel-heading"><div><h2>이용권 등록 이력</h2><p>재등록한 이용권을 모두 확인할 수 있어요.</p></div><button className="button secondary" onClick={onAddPass}><Icon name="plus"/>이용권 추가</button></div><div className="table-scroll"><table><thead><tr><th>이용 기간</th><th>이용 조건</th><th>기간</th><th>출석 횟수</th><th>상태</th><th>수정</th></tr></thead><tbody>{member.passes.slice().sort((a,b)=>b.start.localeCompare(a.start)).map(p=><tr key={p.id}><td>{moneylessDate(p.start)} – {moneylessDate(addMonths(p.start,p.months))}</td><td>주 {p.weekly}회 / 월 {p.weekly*4}회</td><td>{p.months}개월</td><td>{store.attendance.filter(a=>a.passId===p.id).length}회</td><td><span className={`badge ${passStatus(p)==="이용 중"?"blue":"muted"}`}>{passStatus(p)}</span></td><td><button className="text-link" onClick={()=>onEditPass(p)}>수정</button></td></tr>)}</tbody></table></div></section><section className="panel history-panel"><div className="panel-heading"><div><h2>출석 이력</h2><p>날짜별 참여 수업과 사용한 이용권</p></div></div><div className="table-scroll"><table><thead><tr><th>날짜</th><th>참여 시간대</th><th>사용한 이용권</th><th>차감 횟수</th></tr></thead><tbody>{records.length?records.map(a=>{const p=member.passes.find(x=>x.id===a.passId);return <tr key={a.id}><td>{moneylessDate(a.date)}</td><td>{a.sessions.join(" · ")}</td><td>{p?`주 ${p.weekly}회 · ${p.months}개월`:"-"}</td><td>1회</td></tr>}):<tr><td colSpan={4} className="table-empty">출석 기록이 없습니다.</td></tr>}</tbody></table></div></section></div>}
