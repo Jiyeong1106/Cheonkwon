@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-export type Pass = { id: string; start: string; months: number; weekly: number };
+export type Pass = { id: string; start: string; end?: string; months: number; weekly: number };
 export type Member = { id: string; name: string; phone: string; memo: string; created: string; passes: Pass[] };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
 export type Schedule = { id: string; day: number; time: string };
@@ -124,6 +124,7 @@ export async function createPass(memberId: string, pass: Pass): Promise<void> {
 export async function updatePass(pass: Pass): Promise<void> {
   await updateDoc(locationDocument("passes", pass.id), {
     start: pass.start,
+    end: pass.end ?? null,
     months: pass.months,
     weekly: pass.weekly,
   });

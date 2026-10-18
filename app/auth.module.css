@@ -89,30 +89,6 @@
   line-height: 1.6;
 }
 
-.accountInfo {
-  min-width: 0;
-}
-
-.accountInfo small {
-  max-width: 145px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.logoutButton {
-  margin-left: auto;
-  border: 0;
-  background: transparent;
-  color: #75827b;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.logoutButton:hover {
-  color: #365f91;
-}
-
 .card > p:last-child:not(.eyebrow) {
   color: #78847e;
   font-size: 13px;

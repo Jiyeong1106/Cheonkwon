@@ -19,3 +19,16 @@
 .migration-copy{margin:0;color:#65736b;font-size:13px;line-height:1.75}
 .migration-actions{justify-content:space-between;flex-wrap:wrap}
 .migration-actions .button:disabled{opacity:.6;cursor:wait}
+.brand{width:100%;padding:0;gap:0}
+.brand-logo{display:block;width:54.6%;height:auto;margin:0 auto}
+.account-avatar,.profile-button{flex:0 0 34px;aspect-ratio:1/1;border:0;border-radius:50%;padding:0;line-height:1}
+.profile-menu-wrap{position:relative;display:flex;align-items:center}
+.profile-menu{position:absolute;z-index:30;top:calc(100% + 9px);right:0;width:min(250px,calc(100vw - 30px));padding:7px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px #17242e1a}
+.profile-menu-account{padding:7px 9px 11px;border-bottom:1px solid #eef0f2}
+.profile-menu-account span{display:block;margin-bottom:3px;color:#929d96;font-size:10px}
+.profile-menu-account strong{display:block;color:#3f4e46;font-size:11px;font-weight:600;line-height:1.5;overflow-wrap:anywhere}
+.profile-menu-account small{display:block;margin-top:2px;color:#7f8b84;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.profile-menu .profile-menu-logout{display:flex;width:100%;align-items:center;justify-content:flex-start;gap:8px;margin:5px 0 0;padding:9px;border:0;border-radius:7px;background:transparent;color:#59655f;font:inherit;font-size:11px;font-weight:600;line-height:1.4;text-align:left;white-space:nowrap}
+.profile-menu .profile-menu-logout:hover{background:#fbeeee;color:#a44742}
+.profile-menu-logout .icon{width:16px;height:16px}
+.today-label strong{margin-right:8px;color:#4d78a5;font-size:11px;font-weight:700;letter-spacing:.02em}
