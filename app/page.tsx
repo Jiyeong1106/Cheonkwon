@@ -13,6 +13,8 @@ type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[
 type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "notifications" | null;
 
 const STORE_KEY = "cheonkwon-mvp-v1";
+// Temporary public demo mode. Set to false to require admin Google sign-in again.
+const DEMO_MODE = true;
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -39,7 +41,7 @@ function Icon({ name }: { name: string }) {
 
 export default function Home() {
   const [user,setUser]=useState<User|null>(null);
-  const [authReady,setAuthReady]=useState(false);
+  const [authReady,setAuthReady]=useState(DEMO_MODE);
   const [authPending,setAuthPending]=useState(false);
   const [authError,setAuthError]=useState("");
   const [store,setStore]=useState<Store>(defaultStore);
@@ -60,7 +62,10 @@ export default function Home() {
   const [scheduleTime,setScheduleTime]=useState("19:00");
   const [toast,setToast]=useState("");
 
-  useEffect(()=>onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}setAuthReady(true)}),[]);
+  useEffect(()=>{
+    if(DEMO_MODE)return;
+    return onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}setAuthReady(true)});
+  },[]);
   useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date})); try { const saved=localStorage.getItem(STORE_KEY); if(saved) setStore(JSON.parse(saved)); } catch {} setLoaded(true); },[]);
   useEffect(()=>{ if(loaded) localStorage.setItem(STORE_KEY,JSON.stringify(store)); },[store,loaded]);
   useEffect(()=>{ if(!toast)return; const timer=setTimeout(()=>setToast(""),2800); return ()=>clearTimeout(timer); },[toast]);
@@ -102,7 +107,7 @@ export default function Home() {
   const handleSignOut=async()=>{try{await signOut(auth)}catch{setToast("로그아웃에 실패했어요. 다시 시도해 주세요.")}};
 
   if(!authReady)return <div className={styles.screen}><div className={styles.card}><div className={styles.mark}>천</div><p>인증 상태를 확인하고 있어요…</p></div></div>;
-  if(!user)return <main className={styles.screen}><section className={styles.card}><div className={styles.mark}>천</div><p className={styles.eyebrow}>CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className={styles.description}>관리자 Google 계정으로 로그인해 주세요.</p><button className={styles.googleButton} onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><span className={styles.googleG} aria-hidden="true">G</span>{authPending?"로그인 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className={styles.error} role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className={styles.error} role="alert">{authError}</p>}</section></main>;
+  if(!DEMO_MODE&&!user)return <main className={styles.screen}><section className={styles.card}><div className={styles.mark}>천</div><p className={styles.eyebrow}>CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className={styles.description}>관리자 Google 계정으로 로그인해 주세요.</p><button className={styles.googleButton} onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><span className={styles.googleG} aria-hidden="true">G</span>{authPending?"로그인 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className={styles.error} role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className={styles.error} role="alert">{authError}</p>}</section></main>;
 
   const pageTitle=view==="dashboard"?"대시보드":view==="members"?"회원 관리":view==="attendance"?"출석 체크":"회원 상세";
   const breadcrumb=<div className="breadcrumb"><button onClick={()=>go("dashboard")}>천권태권도</button>{view!=="dashboard"&&<><span>/</span>{view==="detail"?<><button onClick={()=>go("members")}>회원목록</button><span>/</span><span>회원상세</span></>:<span>{view==="attendance"?"출석 체크":"회원목록"}</span>}</>}</div>;
@@ -114,7 +119,7 @@ export default function Home() {
       <div className="dojo-card"><div className="dojo-avatar">천</div><div><strong>천권태권도</strong><small>운영 도장</small></div><span className="online-dot"/></div>
       <div className="nav-label">메뉴</div>
       <nav className="side-nav"><button className={view==="dashboard"?"active":""} onClick={()=>go("dashboard")}><Icon name="grid"/>대시보드</button><button className={view==="members"||view==="detail"?"active":""} onClick={()=>go("members")}><Icon name="users"/>회원 관리</button><button className={view==="attendance"?"active":""} onClick={()=>go("attendance")}><Icon name="check"/>출석 체크</button></nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><div className="account"><div className="account-avatar">{user.displayName?.trim().slice(0,1)||user.email?.slice(0,1)||"관"}</div><div className={styles.accountInfo}><strong>{user.displayName||"Google 사용자"}</strong><small>{user.email||"Google 계정"}</small></div><button className={styles.logoutButton} onClick={handleSignOut}>로그아웃</button></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><div className="account"><div className="account-avatar">{DEMO_MODE?"체":user?.displayName?.trim().slice(0,1)||user?.email?.slice(0,1)||"관"}</div><div className={styles.accountInfo}><strong>{DEMO_MODE?"공개 시연 모드":user?.displayName||"Google 사용자"}</strong><small>{DEMO_MODE?"입력 내용은 이 기기에만 저장됩니다.":user?.email||"Google 계정"}</small></div>{!DEMO_MODE&&<button className={styles.logoutButton} onClick={handleSignOut}>로그아웃</button>}</div></div>
     </aside>
     {mobileMenu&&<button className="scrim nav-scrim" onClick={()=>setMobileMenu(false)} aria-label="메뉴 닫기"/>}
     <main className="main-area">
