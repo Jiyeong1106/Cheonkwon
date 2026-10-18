@@ -56,7 +56,11 @@ export function watchDojoStore(onChange: (store: Store) => void, onError: (error
   const fail = (error: Error) => onError(error);
   const unsubs = [
     onSnapshot(locationCollection("members"), (snapshot) => {
-      members = snapshot.docs.map((item) => ({ ...item.data(), id: item.id, passes: [] }) as Member);
+      members = snapshot.docs.map((item) => ({
+        ...(item.data() as Omit<Member, "id" | "passes">),
+        id: item.id,
+        passes: [],
+      }));
       ready.add("members");
       publish();
     }, fail),
@@ -125,7 +129,10 @@ export async function updatePass(pass: Pass): Promise<void> {
   });
 }
 
-export async function toggleAttendance(record: Omit<Attendance, "id">, time: string): Promise<void> {
+export async function toggleAttendance(
+  record: Pick<Attendance, "memberId" | "date" | "passId">,
+  time: string,
+): Promise<void> {
   const attendanceRef = locationDocument("attendance", attendanceDocumentId(record.memberId, record.date));
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(attendanceRef);
