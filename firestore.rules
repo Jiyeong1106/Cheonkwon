@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'yoonjy1106@gmail.com';
+    }
+
+    // Current single-dojo deployment. Add each future location's access policy here.
+    match /locations/{locationId}/{document=**} {
+      allow read, write: if locationId == 'main' && isAdmin();
+    }
+  }
+}

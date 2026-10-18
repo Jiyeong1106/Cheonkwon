@@ -14,3 +14,8 @@
 
 .schedule-form>.schedule-days-field,.schedule-form>.schedule-bottom-row{grid-column:1/-1}.weekday-chips{flex-wrap:nowrap}
 @media(max-width:400px){.weekday-chips{gap:4px}.weekday-chip{width:34px;height:34px;flex:0 0 34px}}
+
+.firestore-error{margin:12px 20px 0;padding:11px 14px;border:1px solid #f0d3cd;border-radius:8px;background:#fff8f6;color:#a54d41;font-size:13px}
+.migration-copy{margin:0;color:#65736b;font-size:13px;line-height:1.75}
+.migration-actions{justify-content:space-between;flex-wrap:wrap}
+.migration-actions .button:disabled{opacity:.6;cursor:wait}

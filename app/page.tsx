@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import {
+  createMember,
+  createPass,
+  createSchedules,
+  DEFAULT_SCHEDULES,
+  deleteAttendanceForDate,
+  hasLegacyData,
+  importLegacyStore,
+  initializeDojo,
+  isDojoInitialized,
+  newScheduleId,
+  readLegacyStore,
+  removeSchedule as removeScheduleDocument,
+  startFreshDojo,
+  toggleAttendance as toggleAttendanceRecord,
+  updateMember,
+  updatePass,
+  watchDojoStore,
+  type Attendance,
+  type Member,
+  type Pass,
+  type Schedule,
+  type Store,
+} from "@/lib/dojo-data";
 import styles from "./auth.module.css";
 
-type Pass = { id: string; start: string; months: number; weekly: number };
-type Member = { id: string; name: string; phone: string; memo: string; created: string; passes: Pass[] };
-type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
-type Schedule = { id: string; day: number; time: string };
-type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[] };
 type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "notifications" | null;
 
 const STORE_KEY = "cheonkwon-mvp-v1";
@@ -22,7 +41,7 @@ const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
 const isAdminEmail = (email: string | null) =>
   Boolean(email && ADMIN_EMAILS.includes(email.toLowerCase()));
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
-const defaultStore: Store = { members: [], attendance: [], schedules: [1,2,3,4,5].flatMap(day=>["19:00","20:00","21:00"].map(time=>({id:`default-${day}-${time}`,day,time}))).concat([{id:"default-6-11:00",day:6,time:"11:00"}]) };
+const defaultStore: Store = { members: [], attendance: [], schedules: DEFAULT_SCHEDULES };
 const weekdayNames = ["일", "월", "화", "수", "목", "금", "토"];
 const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
 const hourOptions = Array.from({ length: 24 }, (_, hour) => { const value = String(hour).padStart(2, "0"); return [value, value]; });
@@ -36,6 +55,12 @@ const monthAttendance = (store: Store, m: Member, p: Pass, date: string) => stor
 const statusFor = (m: Member, date: string) => { const p=activePass(m,date); if(p) return "이용 중"; return m.passes.length ? "만료" : "미등록"; };
 const fmtPhone = (a:string,b:string,c:string) => [a,b,c].filter(Boolean).join("-");
 const getDay = (date:string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+const firestoreErrorMessage = (error: unknown, action: string) => {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  return code === "permission-denied"
+    ? "Firestore 접근이 거부됐어요. Firebase Console에 firestore.rules를 게시했는지 확인해 주세요."
+    : `${action} 실패했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.`;
+};
 
 function Icon({ name }: { name: string }) {
   const paths: Record<string,string> = { grid:"M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z", users:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M23 11h-6", check:"M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", calendar:"M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z", search:"M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z M21 21l-4.35-4.35", bell:"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4", arrow:"M5 12h14 M12 5l7 7-7 7", plus:"M12 5v14 M5 12h14", close:"M18 6 6 18 M6 6l12 12", clock:"M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", edit:"M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z", chevron:"m9 18 6-6-6-6", help:"M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", shield:"M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" };
@@ -64,13 +89,43 @@ export default function Home() {
   const [scheduleDays,setScheduleDays]=useState<number[]>([1]);
   const [scheduleTime,setScheduleTime]=useState("19:00");
   const [toast,setToast]=useState("");
+  const [loadError,setLoadError]=useState("");
+  const [legacyStore,setLegacyStore]=useState<Store|null>(null);
+  const [migrationBusy,setMigrationBusy]=useState(false);
+  const [migrationOpen,setMigrationOpen]=useState(false);
+  const migrationChecked=useRef(false);
 
   useEffect(()=>{
     if(DEMO_MODE)return;
     return onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}setAuthReady(true)});
   },[]);
-  useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date})); try { const saved=localStorage.getItem(STORE_KEY); if(saved) setStore(JSON.parse(saved)); } catch {} setLoaded(true); },[]);
-  useEffect(()=>{ if(loaded) localStorage.setItem(STORE_KEY,JSON.stringify(store)); },[store,loaded]);
+  useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date})); },[]);
+  useEffect(()=>{
+    if(!user){setLoaded(false);return}
+    let active=true;
+    migrationChecked.current=false;
+    setLoaded(false);setLoadError("");setMigrationOpen(false);setLegacyStore(null);
+    const unsubscribe=watchDojoStore(nextStore=>{
+      if(!active)return;
+      setStore(nextStore);setLoaded(true);
+      if(migrationChecked.current)return;
+      migrationChecked.current=true;
+      const isEmpty=nextStore.members.length===0&&nextStore.attendance.length===0&&nextStore.schedules.length===0;
+      if(!isEmpty)return;
+      void isDojoInitialized().then(initialized=>{
+        if(!active||initialized)return;
+        return readLegacyStore(localStorage.getItem(STORE_KEY)).then(legacy=>{
+          if(!active)return;
+          if(legacy&&hasLegacyData(legacy)){setLegacyStore(legacy);setMigrationOpen(true)}
+          else void initializeDojo().catch(error=>{if(active)setLoadError(firestoreErrorMessage(error,"기본 수업 시간 설정"))});
+        });
+      }).catch(error=>{if(active)setLoadError(firestoreErrorMessage(error,"도장 설정 확인"))});
+    },error=>{
+      if(!active)return;
+      setLoadError(firestoreErrorMessage(error,"Firestore 데이터 불러오기"));setLoaded(true);
+    });
+    return()=>{active=false;unsubscribe()};
+  },[user]);
   useEffect(()=>{ if(!toast)return; const timer=setTimeout(()=>setToast(""),2800); return ()=>clearTimeout(timer); },[toast]);
   useEffect(()=>{ const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")setDialog(null)}; window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey); },[]);
 
@@ -96,17 +151,19 @@ export default function Home() {
   const showMember=(m:Member)=>{setSelected(m.id);setView("detail")};
   const resetForm=()=>setForm({name:"",phone1:"",phone2:"",phone3:"",memo:"",start:currentDate,weekly:"3",months:"3"});
   const openNew=()=>{resetForm();setDialog("member")};
-  const saveNew=()=>{if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}const member:Member={id:id(),name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim(),created:currentDate,passes:[{id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)}]};setStore(s=>({...s,members:[...s.members,member]}));setDialog(null);setToast("새 회원을 등록했어요.")};
+  const saveNew=()=>{if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}const member:Member={id:id(),name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim(),created:currentDate,passes:[{id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)}]};void createMember(member).then(()=>{setDialog(null);setToast("새 회원을 등록했어요.")}).catch(error=>setToast(firestoreErrorMessage(error,"회원 등록")))};
   const openEdit=(m:Member)=>{const parts=m.phone.split("-");setForm({...form,name:m.name,phone1:parts[0]||"",phone2:parts[1]||"",phone3:parts[2]||"",memo:m.memo});setDialog("edit")};
-  const saveEdit=()=>{if(!selectedMember)return;if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim()}:m)}));setDialog(null);setToast("회원 정보를 수정했어요.")};
-  const addPass=()=>{if(!selectedMember)return;const p:Pass={id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)};setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,passes:[...m.passes,p]}:m)}));setDialog(null);setToast("새 이용권을 등록했어요.")};
+  const saveEdit=()=>{if(!selectedMember)return;if(!form.name.trim()){setToast("회원 이름을 입력해 주세요.");return}void updateMember({id:selectedMember.id,name:form.name.trim(),phone:fmtPhone(form.phone1,form.phone2,form.phone3),memo:form.memo.trim()}).then(()=>{setDialog(null);setToast("회원 정보를 수정했어요.")}).catch(error=>setToast(firestoreErrorMessage(error,"회원 정보 수정")))};
+  const addPass=()=>{if(!selectedMember)return;const p:Pass={id:id(),start:form.start,months:Number(form.months),weekly:Number(form.weekly)};void createPass(selectedMember.id,p).then(()=>{setDialog(null);setToast("새 이용권을 등록했어요.")}).catch(error=>setToast(firestoreErrorMessage(error,"이용권 등록")))};
   const openPassEdit=(pass:Pass)=>{setEditingPassId(pass.id);setForm(f=>({...f,start:pass.start,weekly:String(pass.weekly),months:String(pass.months)}));setDialog("passEdit")};
-  const savePassEdit=()=>{if(!selectedMember||!editingPassId)return;setStore(s=>({...s,members:s.members.map(m=>m.id===selectedMember.id?{...m,passes:m.passes.map(p=>p.id===editingPassId?{...p,start:form.start,weekly:Number(form.weekly),months:Number(form.months)}:p)}:m)}));setDialog(null);setToast("이용권 정보를 수정했어요.")};
-  const attendanceToggle=(m:Member,time:string)=>{const pass=activePass(m,attendanceDate);if(!pass)return;const used=monthAttendance(store,m,pass,attendanceDate);const existing=store.attendance.find(a=>a.memberId===m.id&&a.date===attendanceDate);if(!existing&&used>=pass.weekly*4){setToast(`${m.name} 회원의 이번 이용 기간 횟수를 모두 사용했어요.`);return}if(existing?.sessions.includes(time)){const sessions=existing.sessions.filter(t=>t!==time);setStore(s=>({...s,attendance:s.attendance.flatMap(a=>a.id!==existing.id?[a]:sessions.length?[{...a,sessions}]:[])}));return}if(existing){setStore(s=>({...s,attendance:s.attendance.map(a=>a.id===existing.id?{...a,sessions:[...a.sessions,time].sort()}:a)}))}else setStore(s=>({...s,attendance:[...s.attendance,{id:id(),memberId:m.id,date:attendanceDate,passId:pass.id,sessions:[time]}]}))};
-  const cancelDay=()=>{const count=store.attendance.filter(a=>a.date===attendanceDate).length;if(!count)return;if(!window.confirm(`${attendanceDate}의 출석 ${count}건을 모두 취소할까요?`))return;setStore(s=>({...s,attendance:s.attendance.filter(a=>a.date!==attendanceDate)}));setToast("선택한 날짜의 출석을 모두 취소했어요.")};
+  const savePassEdit=()=>{if(!selectedMember||!editingPassId)return;void updatePass({id:editingPassId,start:form.start,weekly:Number(form.weekly),months:Number(form.months)}).then(()=>{setDialog(null);setToast("이용권 정보를 수정했어요.")}).catch(error=>setToast(firestoreErrorMessage(error,"이용권 수정")))};
+  const attendanceToggle=(m:Member,time:string)=>{const pass=activePass(m,attendanceDate);if(!pass)return;const used=monthAttendance(store,m,pass,attendanceDate);const existing=store.attendance.find(a=>a.memberId===m.id&&a.date===attendanceDate);if(!existing&&used>=pass.weekly*4){setToast(`${m.name} 회원의 이번 이용 기간 횟수를 모두 사용했어요.`);return}void toggleAttendanceRecord({memberId:m.id,date:attendanceDate,passId:pass.id},time).catch(error=>setToast(firestoreErrorMessage(error,"출석 저장")))};
+  const cancelDay=()=>{const count=store.attendance.filter(a=>a.date===attendanceDate).length;if(!count)return;if(!window.confirm(`${attendanceDate}의 출석 ${count}건을 모두 취소할까요?`))return;void deleteAttendanceForDate(attendanceDate).then(()=>setToast("선택한 날짜의 출석을 모두 취소했어요.")).catch(error=>setToast(firestoreErrorMessage(error,"출석 취소")))};
   const toggleScheduleDay=(day:number)=>setScheduleDays(days=>days.includes(day)?days.filter(value=>value!==day):[...days,day].sort((a,b)=>a-b));
-  const addSchedule=()=>{if(scheduleDays.length===0){setToast("수업 요일을 하나 이상 선택해 주세요.");return}const existing=new Set(store.schedules.map(s=>`${s.day}-${s.time}`));const newSchedules=scheduleDays.filter(day=>!existing.has(`${day}-${scheduleTime}`)).map(day=>({id:id(),day,time:scheduleTime}));if(newSchedules.length===0){setToast("선택한 요일에 같은 시간 수업이 이미 등록돼 있어요.");return}setStore(s=>({...s,schedules:[...s.schedules,...newSchedules].sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time))}));setToast(newSchedules.length===scheduleDays.length?"선택한 요일에 수업 시간을 추가했어요.":"이미 등록된 요일을 제외하고 추가했어요.")};
-  const removeSchedule=(sid:string)=>setStore(s=>({...s,schedules:s.schedules.filter(x=>x.id!==sid)}));
+  const addSchedule=()=>{if(scheduleDays.length===0){setToast("수업 요일을 하나 이상 선택해 주세요.");return}const existing=new Set(store.schedules.map(s=>`${s.day}-${s.time}`));const newSchedules=scheduleDays.filter(day=>!existing.has(`${day}-${scheduleTime}`)).map(day=>({id:newScheduleId(day,scheduleTime),day,time:scheduleTime}));if(newSchedules.length===0){setToast("선택한 요일에 같은 시간 수업이 이미 등록돼 있어요.");return}void createSchedules(newSchedules).then(()=>setToast(newSchedules.length===scheduleDays.length?"선택한 요일에 수업 시간을 추가했어요.":"이미 등록된 요일을 제외하고 추가했어요.")).catch(error=>setToast(firestoreErrorMessage(error,"수업 시간 추가")))};
+  const removeSchedule=(sid:string)=>void removeScheduleDocument(sid).catch(error=>setToast(firestoreErrorMessage(error,"수업 시간 삭제")));
+  const importExistingData=async()=>{if(!legacyStore)return;setMigrationBusy(true);try{await importLegacyStore(legacyStore);setMigrationOpen(false);setLegacyStore(null);setToast("기존 브라우저 데이터를 Firestore로 가져왔어요.")}catch(error){setLoadError(error instanceof Error?error.message:firestoreErrorMessage(error,"기존 데이터 가져오기"))}finally{setMigrationBusy(false)}};
+  const startWithFirestore=async()=>{setMigrationBusy(true);try{await startFreshDojo();setMigrationOpen(false);setLegacyStore(null);setToast("Firestore에서 새로 시작합니다.")}catch(error){setLoadError(firestoreErrorMessage(error,"Firestore 초기화"))}finally{setMigrationBusy(false)}};
   const handleGoogleSignIn=async()=>{setAuthPending(true);setAuthError("");try{const result=await signInWithPopup(auth,new GoogleAuthProvider());if(!isAdminEmail(result.user.email)){await signOut(auth);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.")}}catch(error){const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";if(code==="auth/popup-closed-by-user"){return}setAuthError(code==="auth/unauthorized-domain"?"Firebase Authentication의 승인된 도메인에 이 사이트를 추가해 주세요.":code==="auth/popup-blocked"?"브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.":"Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.")}finally{setAuthPending(false)}};
   const handleSignOut=async()=>{try{await signOut(auth)}catch{setToast("로그아웃에 실패했어요. 다시 시도해 주세요.")}};
 
@@ -127,6 +184,7 @@ export default function Home() {
     </aside>
     {mobileMenu&&<button className="scrim nav-scrim" onClick={()=>setMobileMenu(false)} aria-label="메뉴 닫기"/>}
     <main className="main-area">
+      {loadError&&<div className="firestore-error" role="alert">{loadError}</div>}
       <header className="topbar"><button className="menu-toggle icon-button" onClick={()=>setMobileMenu(true)} aria-label="메뉴 열기">☰</button>{breadcrumb}<div className="top-actions"><span className="today-label">{new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(`${currentDate}T12:00:00+09:00`))}</span><button className="icon-button notification-button" aria-label="알림" onClick={()=>setDialog("notifications")}><Icon name="bell"/></button><span className="profile-button" title={DEMO_MODE?"공개 시연 모드":user?.displayName||user?.email||"Google 계정"} aria-label={DEMO_MODE?"공개 시연 모드":"로그인 사용자"}>{DEMO_MODE?"체":user?.displayName?.trim().slice(0,1)||user?.email?.slice(0,1)||"관"}</span></div></header>
       <div className="page-content"><div className="page-heading"><div><div className="eyebrow">CHEONKWON TAEKWONDO</div><h1>{pageTitle}</h1>{view==="dashboard"?<p>오늘도 활기찬 하루, 도장 운영 현황을 확인해 보세요.</p>:view==="members"?<p>회원 정보와 이용권 현황을 한눈에 관리할 수 있어요.</p>:view==="attendance"?<p>오늘의 수업 출석을 빠르고 간편하게 체크해 보세요.</p>:null}</div><div className="heading-actions">{view==="dashboard"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}{view==="members"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}</div></div>
       {view==="dashboard"&&<>
@@ -145,10 +203,11 @@ export default function Home() {
     {dialog&&<div className="scrim modal-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null)}}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><div className="modal-heading"><div><span className="eyebrow">CHEONKWON</span><h2 id="dialog-title">{dialog==="member"?"새 회원 등록":dialog==="edit"?"회원 정보 수정":dialog==="pass"?"이용권 추가":dialog==="passEdit"?"이용권 수정":dialog==="schedule"?"수업 시간 관리":dialog==="help"?"사용 안내":"알림"}</h2></div><button className="icon-button" aria-label="닫기" onClick={()=>setDialog(null)}><Icon name="close"/></button></div>
       {(dialog==="member"||dialog==="edit"||dialog==="pass"||dialog==="passEdit")&&<div className="modal-body">{dialog!=="pass"&&dialog!=="passEdit"&&<><label className="form-field"><span>이름 <i>*</i></span><input autoFocus value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="회원 이름"/></label><div className="form-field"><span>전화번호</span><div className="phone-fields"><input inputMode="numeric" maxLength={3} value={form.phone1} onChange={e=>setForm(f=>({...f,phone1:e.target.value.replace(/\D/g,"").slice(0,3)}))} placeholder="010"/><b>-</b><input inputMode="numeric" maxLength={4} value={form.phone2} onChange={e=>setForm(f=>({...f,phone2:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="1111"/><b>-</b><input inputMode="numeric" maxLength={4} value={form.phone3} onChange={e=>setForm(f=>({...f,phone3:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="2222"/></div></div><label className="form-field"><span>메모</span><textarea value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))} placeholder="도장 운영에 필요한 메모를 입력하세요." rows={3}/></label></>}{dialog!=="edit"&&<><div className="form-divider">{dialog==="member"?"첫 이용권":dialog==="passEdit"?"이용권 정보 수정":"이용권 정보"}</div><label className="form-field"><span>시작일</span><input type="date" value={form.start} onChange={e=>setForm(f=>({...f,start:e.target.value}))}/></label><div className="form-row"><label className="form-field"><span>주간 횟수</span><Select value={form.weekly} onChange={v=>setForm(f=>({...f,weekly:v}))} options={["1","2","3","5","7"].map(v=>[v,`주 ${v}회`])}/></label><label className="form-field"><span>이용 기간</span><Select value={form.months} onChange={v=>setForm(f=>({...f,months:v}))} options={["1","2","3","6","12"].map(v=>[v,`${v}개월`])}/></label></div><p className="form-note">월 한도는 주간 횟수 × 4회로 계산됩니다. 남은 횟수는 다음 기간으로 이월되지 않아요.</p></>}</div>}
       {dialog==="schedule"&&<div className="modal-body"><div className="schedule-form"><div className="form-field schedule-days-field"><span>요일 <small>여러 개 선택 가능</small></span><div className="weekday-chips" role="group" aria-label="수업 요일">{weekdayOrder.map(index=><button type="button" key={weekdayNames[index]} className={`weekday-chip ${scheduleDays.includes(index)?"selected":""}`} aria-pressed={scheduleDays.includes(index)} onClick={()=>toggleScheduleDay(index)}>{weekdayNames[index]}</button>)}</div></div><div className="schedule-bottom-row"><div className="form-field"><span>수업 시간</span><div className="time-selects"><Select value={scheduleTime.slice(0,2)} onChange={hour=>setScheduleTime(current=>`${hour}:${current.slice(3)}`)} options={hourOptions}/><span>:</span><Select value={scheduleTime.slice(3,5)} onChange={minute=>setScheduleTime(current=>`${current.slice(0,2)}:${minute}`)} options={minuteOptions}/></div></div><button className="button primary add-schedule" onClick={addSchedule}><Icon name="plus"/>수업 추가</button></div></div><div className="schedule-list">{[0,1,2,3,4,5,6].map(day=>{const entries=store.schedules.filter(s=>s.day===day).sort((a,b)=>a.time.localeCompare(b.time));return entries.length?<div className="schedule-day" key={day}><strong>{weekdayNames[day]}요일</strong><div>{entries.map(s=><span className="schedule-chip" key={s.id}>{s.time}<button onClick={()=>removeSchedule(s.id)} aria-label={`${s.time} 삭제`}>×</button></span>)}</div></div>:null})}{!store.schedules.length&&<Empty compact title="등록된 수업 시간이 없어요"/>}</div></div>}
-      {dialog==="help"&&<div className="modal-body help-content"><div><b>01</b><section><strong>회원과 이용권 등록</strong><p>새 회원 등록에서 이름, 연락처와 첫 이용권을 함께 등록할 수 있어요. 재등록은 회원 상세에서 이용권 추가를 선택해 주세요.</p></section></div><div><b>02</b><section><strong>출석 체크</strong><p>날짜와 수업 시간대를 선택한 뒤 회원 카드의 수업 시간을 눌러 체크하세요. 같은 날 여러 수업을 들어도 이용 횟수는 하루 한 번만 차감됩니다.</p></section></div><div><b>03</b><section><strong>수업 시간 관리</strong><p>출석 체크 화면에서 요일과 시간을 추가하거나 삭제할 수 있어요.</p></section></div><div className="storage-note">현재 데이터는 이 브라우저에 저장됩니다.</div></div>}
+      {dialog==="help"&&<div className="modal-body help-content"><div><b>01</b><section><strong>회원과 이용권 등록</strong><p>새 회원 등록에서 이름, 연락처와 첫 이용권을 함께 등록할 수 있어요. 재등록은 회원 상세에서 이용권 추가를 선택해 주세요.</p></section></div><div><b>02</b><section><strong>출석 체크</strong><p>날짜와 수업 시간대를 선택한 뒤 회원 카드의 수업 시간을 눌러 체크하세요. 같은 날 여러 수업을 들어도 이용 횟수는 하루 한 번만 차감됩니다.</p></section></div><div><b>03</b><section><strong>수업 시간 관리</strong><p>출석 체크 화면에서 요일과 시간을 추가하거나 삭제할 수 있어요.</p></section></div><div className="storage-note">회원·이용권·출석 정보는 Firestore에 저장되어 로그인 가능한 관리자 기기에서 공유됩니다.</div></div>}
       {dialog==="notifications"&&<div className="modal-body"><div className="empty-state"><div className="empty-icon"><Icon name="bell"/></div><strong>새로운 알림이 없어요</strong><p>새 소식이 생기면 이곳에 알려드릴게요.</p></div></div>}
       <div className="modal-footer">{dialog!=="schedule"&&dialog!=="help"&&dialog!=="notifications"&&<><button className="button secondary" onClick={()=>setDialog(null)}>취소</button><button className="button primary" onClick={dialog==="member"?saveNew:dialog==="edit"?saveEdit:dialog==="passEdit"?savePassEdit:addPass}>{dialog==="member"?"등록하기":dialog==="edit"?"수정하기":dialog==="passEdit"?"수정하기":"이용권 등록"}</button></>}{(dialog==="help"||dialog==="notifications")&&<button className="button secondary full" onClick={()=>setDialog(null)}>닫기</button>}{dialog==="schedule"&&<button className="button secondary full" onClick={()=>setDialog(null)}>완료</button>}</div>
     </div></div>}
+    {migrationOpen&&legacyStore&&<div className="scrim modal-scrim"><section className="modal migration-modal" role="dialog" aria-modal="true" aria-labelledby="migration-title"><div className="modal-heading"><div><span className="eyebrow">CHEONKWON</span><h2 id="migration-title">기존 데이터를 가져올까요?</h2></div></div><div className="modal-body"><p className="migration-copy">이 브라우저에서 회원 {legacyStore.members.length}명, 출석 {legacyStore.attendance.length}건, 수업 시간 {legacyStore.schedules.length}개를 찾았어요. 가져오면 Firebase Firestore에 저장되어 관리자 기기에서 공유됩니다. 현재 브라우저 데이터는 가져오기가 끝난 뒤에도 백업으로 남습니다.</p></div><div className="modal-footer migration-actions"><button className="button secondary" disabled={migrationBusy} onClick={()=>void startWithFirestore()}>Firestore에서 새로 시작</button><button className="button primary" disabled={migrationBusy} onClick={()=>void importExistingData()}>{migrationBusy?"처리 중…":"기존 데이터 가져오기"}</button></div></section></div>}
     {toast&&<div className="toast" role="status">{toast}</div>}
     {!loaded&&<div className="loading-overlay">도장 데이터를 불러오는 중이에요…</div>}
   </div>;
