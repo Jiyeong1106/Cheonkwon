@@ -14,7 +14,7 @@ type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "n
 
 const STORE_KEY = "cheonkwon-mvp-v1";
 // Temporary public demo mode. Set to false to require admin Google sign-in again.
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
