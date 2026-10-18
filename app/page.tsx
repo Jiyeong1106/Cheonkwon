@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import styles from "./auth.module.css";
 
 type Pass = { id: string; start: string; months: number; weekly: number };
 type Member = { id: string; name: string; phone: string; memo: string; created: string; passes: Pass[] };
@@ -10,6 +13,12 @@ type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[
 type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "notifications" | null;
 
 const STORE_KEY = "cheonkwon-mvp-v1";
+const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+const isAdminEmail = (email: string | null) =>
+  Boolean(email && ADMIN_EMAILS.includes(email.toLowerCase()));
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 const defaultStore: Store = { members: [], attendance: [], schedules: [1,2,3,4,5].flatMap(day=>["19:00","20:00","21:00"].map(time=>({id:`default-${day}-${time}`,day,time}))).concat([{id:"default-6-11:00",day:6,time:"11:00"}]) };
 const weekdayNames = ["일", "월", "화", "수", "목", "금", "토"];
@@ -29,6 +38,10 @@ function Icon({ name }: { name: string }) {
 }
 
 export default function Home() {
+  const [user,setUser]=useState<User|null>(null);
+  const [authReady,setAuthReady]=useState(false);
+  const [authPending,setAuthPending]=useState(false);
+  const [authError,setAuthError]=useState("");
   const [store,setStore]=useState<Store>(defaultStore);
   const [loaded,setLoaded]=useState(false);
   const [view,setView]=useState<"dashboard"|"members"|"attendance"|"detail">("dashboard");
@@ -47,6 +60,7 @@ export default function Home() {
   const [scheduleTime,setScheduleTime]=useState("19:00");
   const [toast,setToast]=useState("");
 
+  useEffect(()=>onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}setAuthReady(true)}),[]);
   useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date})); try { const saved=localStorage.getItem(STORE_KEY); if(saved) setStore(JSON.parse(saved)); } catch {} setLoaded(true); },[]);
   useEffect(()=>{ if(loaded) localStorage.setItem(STORE_KEY,JSON.stringify(store)); },[store,loaded]);
   useEffect(()=>{ if(!toast)return; const timer=setTimeout(()=>setToast(""),2800); return ()=>clearTimeout(timer); },[toast]);
@@ -84,6 +98,11 @@ export default function Home() {
   const cancelDay=()=>{const count=store.attendance.filter(a=>a.date===attendanceDate).length;if(!count)return;if(!window.confirm(`${attendanceDate}의 출석 ${count}건을 모두 취소할까요?`))return;setStore(s=>({...s,attendance:s.attendance.filter(a=>a.date!==attendanceDate)}));setToast("선택한 날짜의 출석을 모두 취소했어요.")};
   const addSchedule=()=>{if(store.schedules.some(s=>s.day===Number(scheduleDay)&&s.time===scheduleTime)){setToast("이미 등록된 수업 시간이에요.");return}setStore(s=>({...s,schedules:[...s.schedules,{id:id(),day:Number(scheduleDay),time:scheduleTime}].sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time))}));setToast("수업 시간을 추가했어요.")};
   const removeSchedule=(sid:string)=>setStore(s=>({...s,schedules:s.schedules.filter(x=>x.id!==sid)}));
+  const handleGoogleSignIn=async()=>{setAuthPending(true);setAuthError("");try{const result=await signInWithPopup(auth,new GoogleAuthProvider());if(!isAdminEmail(result.user.email)){await signOut(auth);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.")}}catch(error){const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";if(code==="auth/popup-closed-by-user"){return}setAuthError(code==="auth/unauthorized-domain"?"Firebase Authentication의 승인된 도메인에 이 사이트를 추가해 주세요.":code==="auth/popup-blocked"?"브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.":"Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.")}finally{setAuthPending(false)}};
+  const handleSignOut=async()=>{try{await signOut(auth)}catch{setToast("로그아웃에 실패했어요. 다시 시도해 주세요.")}};
+
+  if(!authReady)return <div className={styles.screen}><div className={styles.card}><div className={styles.mark}>천</div><p>인증 상태를 확인하고 있어요…</p></div></div>;
+  if(!user)return <main className={styles.screen}><section className={styles.card}><div className={styles.mark}>천</div><p className={styles.eyebrow}>CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className={styles.description}>관리자 Google 계정으로 로그인해 주세요.</p><button className={styles.googleButton} onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><span className={styles.googleG} aria-hidden="true">G</span>{authPending?"로그인 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className={styles.error} role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className={styles.error} role="alert">{authError}</p>}</section></main>;
 
   const pageTitle=view==="dashboard"?"대시보드":view==="members"?"회원 관리":view==="attendance"?"출석 체크":"회원 상세";
   const breadcrumb=<div className="breadcrumb"><button onClick={()=>go("dashboard")}>천권태권도</button>{view!=="dashboard"&&<><span>/</span>{view==="detail"?<><button onClick={()=>go("members")}>회원목록</button><span>/</span><span>회원상세</span></>:<span>{view==="attendance"?"출석 체크":"회원목록"}</span>}</>}</div>;
@@ -95,11 +114,11 @@ export default function Home() {
       <div className="dojo-card"><div className="dojo-avatar">천</div><div><strong>천권태권도</strong><small>운영 도장</small></div><span className="online-dot"/></div>
       <div className="nav-label">메뉴</div>
       <nav className="side-nav"><button className={view==="dashboard"?"active":""} onClick={()=>go("dashboard")}><Icon name="grid"/>대시보드</button><button className={view==="members"||view==="detail"?"active":""} onClick={()=>go("members")}><Icon name="users"/>회원 관리</button><button className={view==="attendance"?"active":""} onClick={()=>go("attendance")}><Icon name="check"/>출석 체크</button></nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><div className="account"><div className="account-avatar">관</div><div><strong>관장님</strong><small>천권태권도</small></div><span className="more">···</span></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><div className="account"><div className="account-avatar">{user.displayName?.trim().slice(0,1)||user.email?.slice(0,1)||"관"}</div><div className={styles.accountInfo}><strong>{user.displayName||"Google 사용자"}</strong><small>{user.email||"Google 계정"}</small></div><button className={styles.logoutButton} onClick={handleSignOut}>로그아웃</button></div></div>
     </aside>
     {mobileMenu&&<button className="scrim nav-scrim" onClick={()=>setMobileMenu(false)} aria-label="메뉴 닫기"/>}
     <main className="main-area">
-      <header className="topbar"><button className="menu-toggle icon-button" onClick={()=>setMobileMenu(true)} aria-label="메뉴 열기">☰</button>{breadcrumb}<div className="top-actions"><span className="today-label">{new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(`${currentDate}T12:00:00+09:00`))}</span><button className="icon-button notification-button" aria-label="알림" onClick={()=>setDialog("notifications")}><Icon name="bell"/></button><button className="profile-button" onClick={()=>setDialog("notifications")}>관</button></div></header>
+      <header className="topbar"><button className="menu-toggle icon-button" onClick={()=>setMobileMenu(true)} aria-label="메뉴 열기">☰</button>{breadcrumb}<div className="top-actions"><span className="today-label">{new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(new Date(`${currentDate}T12:00:00+09:00`))}</span><button className="icon-button notification-button" aria-label="알림" onClick={()=>setDialog("notifications")}><Icon name="bell"/></button><span className="profile-button" title={user.displayName||user.email||"Google 계정"} aria-label="로그인 사용자">{user.displayName?.trim().slice(0,1)||user.email?.slice(0,1)||"관"}</span></div></header>
       <div className="page-content"><div className="page-heading"><div><div className="eyebrow">CHEONKWON TAEKWONDO</div><h1>{pageTitle}</h1>{view==="dashboard"?<p>오늘도 활기찬 하루, 도장 운영 현황을 확인해 보세요.</p>:view==="members"?<p>회원 정보와 이용권 현황을 한눈에 관리할 수 있어요.</p>:view==="attendance"?<p>오늘의 수업 출석을 빠르고 간편하게 체크해 보세요.</p>:null}</div><div className="heading-actions">{view==="dashboard"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}{view==="members"&&<button className="button primary" onClick={openNew}><Icon name="plus"/>새 회원 등록</button>}</div></div>
       {view==="dashboard"&&<>
         <section className="stats-grid"><Stat icon="users" label="전체 회원" value={`${store.members.length}`} suffix="명" detail="등록된 전체 회원"/><Stat icon="shield" label="이용 중 회원" value={`${activeCount}`} suffix="명" detail="현재 이용권이 유효해요" tone="blue"/><Stat icon="check" label="오늘 출석" value={`${todayRecords.length}`} suffix="명" detail={`${todayRecords.reduce((n,a)=>n+a.sessions.length,0)}개 수업 참여`}/><Stat icon="calendar" label="만료 예정" value={`${expiring.length}`} suffix="명" detail="7일 이내 이용권 만료" tone="amber"/></section>
