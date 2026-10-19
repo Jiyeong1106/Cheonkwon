@@ -71,7 +71,7 @@ const firestoreErrorMessage = (error: unknown, action: string) => {
 };
 
 function Icon({ name }: { name: string }) {
-  const paths: Record<string,string> = { grid:"M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z", users:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M23 11h-6", check:"M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", calendar:"M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z", search:"M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z M21 21l-4.35-4.35", bell:"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4", arrow:"M5 12h14 M12 5l7 7-7 7", plus:"M12 5v14 M5 12h14", close:"M18 6 6 18 M6 6l12 12", logout:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9", clock:"M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", edit:"M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z", chevron:"m9 18 6-6-6-6", help:"M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", shield:"M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" };
+  const paths: Record<string,string> = { grid:"M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z", users:"M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 8v6 M23 11h-6", check:"M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11", calendar:"M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z", search:"M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z M21 21l-4.35-4.35", bell:"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4", arrow:"M5 12h14 M12 5l7 7-7 7", plus:"M12 5v14 M5 12h14", close:"M18 6 6 18 M6 6l12 12", logout:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9", download:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3", clock:"M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", edit:"M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z", chevron:"m9 18 6-6-6-6", help:"M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", shield:"M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" };
   return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.grid}/></svg>;
 }
 
@@ -96,6 +96,7 @@ export default function Home() {
   const [scheduleDays,setScheduleDays]=useState<number[]>([1]);
   const [scheduleTime,setScheduleTime]=useState("19:00");
   const [toast,setToast]=useState("");
+  const [backupBusy,setBackupBusy]=useState(false);
   const [loadError,setLoadError]=useState("");
   const [legacyStore,setLegacyStore]=useState<Store|null>(null);
   const [migrationBusy,setMigrationBusy]=useState(false);
@@ -181,6 +182,45 @@ export default function Home() {
   const startWithFirestore=async()=>{setMigrationBusy(true);try{await startFreshDojo();setMigrationOpen(false);setLegacyStore(null);setToast("Firestore에서 새로 시작합니다.")}catch(error){setLoadError(firestoreErrorMessage(error,"Firestore 초기화"))}finally{setMigrationBusy(false)}};
   const handleGoogleSignIn=async()=>{setAuthPending(true);setAuthError("");try{const result=await signInWithPopup(auth,new GoogleAuthProvider());if(!isAdminEmail(result.user.email)){await signOut(auth);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.")}}catch(error){const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";if(code==="auth/popup-closed-by-user"){return}setAuthError(code==="auth/unauthorized-domain"?"Firebase Authentication의 승인된 도메인에 이 사이트를 추가해 주세요.":code==="auth/popup-blocked"?"브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.":"Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.")}finally{setAuthPending(false)}};
   const handleSignOut=async()=>{setProfileMenuOpen(false);try{await signOut(auth)}catch{setToast("로그아웃에 실패했어요. 다시 시도해 주세요.")}};
+  const exportStoreBackup=async()=>{
+    if(backupBusy)return;
+    setBackupBusy(true);
+    try{
+      const XLSX=await import("xlsx");
+      const workbook=XLSX.utils.book_new();
+      const addSheet=(name:string,headers:string[],rows:(string|number)[][],widths:number[])=>{
+        const sheet=XLSX.utils.aoa_to_sheet([headers,...rows]);
+        sheet["!cols"]=widths.map(wch=>({wch}));
+        if(sheet["!ref"])sheet["!autofilter"]={ref:sheet["!ref"]};
+        XLSX.utils.book_append_sheet(workbook,sheet,name);
+      };
+      const memberNames=new Map(store.members.map(member=>[member.id,member.name]));
+      const members=store.members.map(member=>[
+        member.id,member.name,member.phone,member.birthDate||"",member.memo,member.created,
+      ]);
+      const passes=store.members.flatMap(member=>member.passes.map(pass=>[
+        pass.id,member.name,member.id,weeklyLabel(pass),pass.weekly==="unlimited"?"무제한":pass.weekly,
+        pass.months,pass.start,passEndDate(pass),passAllowance(pass)??"무제한",passAttendance(store,pass),
+      ]));
+      const attendance=store.attendance.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(record=>[
+        record.date,memberNames.get(record.memberId)||"(회원 정보 없음)",record.memberId,
+        record.sessions.slice().sort().join(", "),record.passId,
+      ]);
+      const schedules=store.schedules.slice().sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time)).map(schedule=>[
+        `${weekdayNames[schedule.day]}요일`,schedule.time,
+      ]);
+      addSheet("회원",["회원 ID","이름","연락처","생년월일","메모","등록일"],members,[22,16,18,14,32,14]);
+      addSheet("이용권",["이용권 ID","회원 이름","회원 ID","이용권 종류","주간 횟수","기간(개월)","시작일","종료일","총 허용 출석","누적 출석"],passes,[22,16,22,18,14,12,14,14,16,14]);
+      addSheet("출석",["날짜","회원 이름","회원 ID","수업 시간","이용권 ID"],attendance,[14,16,22,24,22]);
+      addSheet("수업시간",["요일","수업 시간"],schedules,[14,14]);
+      XLSX.writeFileXLSX(workbook,`cheonkwon-backup-${today()}.xlsx`,{compression:true});
+      setToast("회원·이용권·출석·수업시간 엑셀 백업을 저장했어요.");
+    }catch{
+      setToast("엑셀 백업 파일을 만들지 못했어요. 다시 시도해 주세요.");
+    }finally{
+      setBackupBusy(false);
+    }
+  };
 
   if(!DEMO_MODE&&!user)return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">천</div><p className="auth-eyebrow">CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className="auth-description">회원과 출석 정보를 관리하려면<br/>관리자 Google 계정으로 로그인해 주세요.</p><button className="auth-google-button" onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><svg className="auth-google-icon" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.46 13.72 17.74 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.9c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.38 37.93 46.98 31.84 46.98 24.55Z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.88.93 7.55 2.56 10.78l7.97-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.44-4.89 2.3-8.17 2.3-6.26 0-11.55-4.22-13.45-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>{authPending?"Google 계정 연결 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className="auth-error" role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className="auth-error" role="alert">{authError}</p>}<p className="auth-footnote"><Icon name="shield"/> 등록된 관리자 계정만 접근할 수 있습니다.</p></section></main>;
 
@@ -194,7 +234,7 @@ export default function Home() {
       <div className="dojo-card"><div className="dojo-avatar">천</div><div><strong>천권태권도</strong><small>운영 도장</small></div><span className="online-dot"/></div>
       <div className="nav-label">메뉴</div>
       <nav className="side-nav"><button className={view==="dashboard"?"active":""} onClick={()=>go("dashboard")}><Icon name="grid"/>대시보드</button><button className={view==="members"||view==="detail"?"active":""} onClick={()=>go("members")}><Icon name="users"/>회원 관리</button><button className={view==="attendance"?"active":""} onClick={()=>go("attendance")}><Icon name="check"/>출석 체크</button></nav>
-      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div></div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-bubble"><Icon name="help"/></div><strong>도장 운영을 더 쉽게</strong><p>간단한 사용 안내를 확인해 보세요.</p><button onClick={()=>setDialog("help")}>사용 안내 <Icon name="arrow"/></button></div><button className="sidebar-export" onClick={exportStoreBackup} disabled={!loaded||backupBusy} title="회원 연락처와 생년월일이 포함된 Excel 백업을 내려받습니다."><Icon name="download"/>{backupBusy?"엑셀 파일 생성 중…":"Excel로 백업"}</button></div>
     </aside>
     {mobileMenu&&<button className="scrim nav-scrim" onClick={()=>setMobileMenu(false)} aria-label="메뉴 닫기"/>}
     <main className="main-area">
