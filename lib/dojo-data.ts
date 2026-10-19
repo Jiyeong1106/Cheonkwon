@@ -15,8 +15,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-export type Pass = { id: string; start: string; end?: string; months: number; weekly: number };
-export type Member = { id: string; name: string; phone: string; memo: string; created: string; passes: Pass[] };
+export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited" };
+export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[] };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
 export type Schedule = { id: string; day: number; time: string };
 export type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[] };
@@ -107,10 +107,11 @@ export async function createMember(member: Member): Promise<void> {
   await batch.commit();
 }
 
-export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "memo">): Promise<void> {
+export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "birthDate" | "memo">): Promise<void> {
   await updateDoc(locationDocument("members", member.id), {
     name: member.name,
     phone: member.phone,
+    birthDate: member.birthDate ?? "",
     memo: member.memo,
   });
 }

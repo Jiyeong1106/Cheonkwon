@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./visual-theme.css";
 
 export const metadata: Metadata = {
   title: "천권태권도장 | 회원·출석 관리",

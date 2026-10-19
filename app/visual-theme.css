@@ -1,0 +1,172 @@
+/* Visual theme refresh: remove this file and its layout import to restore the previous palette. */
+:root {
+  --ink: #263644;
+  --muted: #7d8995;
+  --blue: #4b7fb8;
+  --blue-dark: #365f91;
+  --blue-pale: #eaf2fa;
+  --page: #f4f6f9;
+  --card: #fffefa;
+  --line: #e4e9ef;
+  --shadow: 0 3px 16px rgb(45 68 95 / 6%);
+}
+
+body {
+  background: var(--page);
+}
+
+.sidebar {
+  background: #fbfaf6;
+}
+
+.topbar {
+  background: rgb(255 254 250 / 95%);
+}
+
+.brand-mark,
+.dojo-avatar {
+  background: linear-gradient(145deg, #75a1cc, #365f91);
+}
+
+.dojo-avatar {
+  background: #eaf2fa;
+  color: #365f91;
+}
+
+.side-nav button {
+  color: #56616d;
+}
+
+.side-nav button:hover,
+.side-nav button.active {
+  background: var(--blue-pale);
+  color: var(--blue-dark);
+}
+
+.button.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.button.primary:hover {
+  background: var(--blue-dark);
+  border-color: var(--blue-dark);
+}
+
+.stat-card,
+.panel {
+  box-shadow: 0 3px 16px rgb(45 68 95 / 5%);
+}
+
+.stat-icon {
+  background: #f0f3f7;
+  color: #697988;
+}
+
+.stat-icon.blue,
+.badge.blue,
+.time-filters button.selected,
+.session-chip.active {
+  background: var(--blue-pale);
+  color: var(--blue-dark);
+}
+
+.stat-icon.amber,
+.soft-count {
+  background: #fbf0df;
+  color: #a87538;
+}
+
+.avatar {
+  background: #edf2f7;
+  color: #496d91;
+}
+
+.avatar.pale {
+  background: #f2eee7;
+  color: #83745d;
+}
+
+.badge.blue {
+  color: #4776a6;
+}
+
+.month-icon,
+.pass-icon {
+  background: #eaf2fa;
+  color: #4b7fb8;
+}
+
+.empty-icon {
+  background: #eef3f8;
+  color: #7188a0;
+}
+
+.time-filters button.selected {
+  border-color: #cfdeed;
+}
+
+.column-count {
+  background: #f0f3f7;
+  color: #74808b;
+}
+
+.status-dot {
+  background: #76a4d0;
+}
+
+.session-chip.active {
+  border-color: #cfdeed;
+}
+
+.pass-icon {
+  color: #4b7fb8;
+}
+
+.bar {
+  background: #e9eff5;
+}
+
+.bar i {
+  background: #5b8cc2;
+}
+
+.schedule-chip {
+  background: #edf3f8;
+  color: #4d7197;
+}
+
+.weekday-chip.selected {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+.today-label strong {
+  color: #4776a6;
+}
+
+.account-avatar,
+.profile-button {
+  background: #f2eadc;
+  color: #786347;
+}
+
+.auth-screen {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(75 127 184 / 11%), transparent 48%),
+    var(--page);
+}
+
+.auth-mark {
+  background: linear-gradient(145deg, #75a1cc, #365f91);
+}
+
+.auth-footnote .icon {
+  color: #7188a0;
+}
+
+@media (max-width: 800px) {
+  .sidebar {
+    background: #fbfaf6;
+  }
+}
