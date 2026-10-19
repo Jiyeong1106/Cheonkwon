@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited" };
 export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[] };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
-export type Schedule = { id: string; day: number; time: string };
+export type Schedule = { id: string; day: number; time: string; effectiveFrom?: string; effectiveTo?: string };
 export type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[] };
 
 export const LOCATION_ID = "main";
@@ -30,6 +30,18 @@ const locationCollection = (name: string) => collection(db, "locations", LOCATIO
 const locationDocument = (name: string, id: string) => doc(db, "locations", LOCATION_ID, name, id);
 const scheduleDocumentId = (day: number, time: string) => `schedule-${day}-${time.replace(":", "")}`;
 const attendanceDocumentId = (memberId: string, date: string) => `${memberId}_${date}`;
+const previousDate = (date: string) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const previous = new Date(Date.UTC(year, month - 1, day - 1));
+  return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}-${String(previous.getUTCDate()).padStart(2, "0")}`;
+};
+
+export function schedulesForDate(schedules: Schedule[], date: string): Schedule[] {
+  return schedules
+    .filter((schedule) => (!schedule.effectiveFrom || schedule.effectiveFrom <= date)
+      && (!schedule.effectiveTo || schedule.effectiveTo >= date))
+    .sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
+}
 
 export function watchDojoStore(onChange: (store: Store) => void, onError: (error: Error) => void): Unsubscribe {
   let members: Member[] = [];
@@ -49,7 +61,8 @@ export function watchDojoStore(onChange: (store: Store) => void, onError: (error
           .sort((a, b) => b.start.localeCompare(a.start)),
       })),
       attendance,
-      schedules: schedules.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time)),
+      schedules: schedules.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time)
+        || (a.effectiveFrom ?? "").localeCompare(b.effectiveFrom ?? "")),
     });
   };
 
@@ -168,14 +181,38 @@ export async function deleteAttendanceForDate(date: string): Promise<number> {
   return snapshot.docs.length;
 }
 
-export async function createSchedules(schedules: Schedule[]): Promise<void> {
+export async function saveSchedulesForDate(
+  currentSchedules: Schedule[],
+  nextSchedules: Schedule[],
+  effectiveDate: string,
+): Promise<void> {
   const batch = writeBatch(db);
-  schedules.forEach(({ id, day, time }) => batch.set(locationDocument("schedules", id), { day, time }));
-  await batch.commit();
-}
+  const currentByTime = new Map(currentSchedules.map((schedule) => [`${schedule.day}-${schedule.time}`, schedule]));
+  const nextByTime = new Map(nextSchedules.map((schedule) => [`${schedule.day}-${schedule.time}`, schedule]));
+  let changes = 0;
 
-export async function removeSchedule(id: string): Promise<void> {
-  await deleteDoc(locationDocument("schedules", id));
+  currentByTime.forEach((schedule, key) => {
+    if (nextByTime.has(key)) return;
+    const scheduleRef = locationDocument("schedules", schedule.id);
+    if (schedule.effectiveFrom && schedule.effectiveFrom >= effectiveDate) {
+      batch.delete(scheduleRef);
+    } else {
+      batch.update(scheduleRef, { effectiveTo: previousDate(effectiveDate) });
+    }
+    changes += 1;
+  });
+
+  nextByTime.forEach((schedule, key) => {
+    if (currentByTime.has(key)) return;
+    batch.set(locationDocument("schedules", schedule.id), {
+      day: schedule.day,
+      time: schedule.time,
+      effectiveFrom: effectiveDate,
+    });
+    changes += 1;
+  });
+
+  if (changes > 0) await batch.commit();
 }
 
 export async function readLegacyStore(raw: string | null): Promise<Store | null> {
