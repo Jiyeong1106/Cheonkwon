@@ -196,8 +196,137 @@ body {
   color: #7188a0;
 }
 
+.member-import-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.member-import-tools input[type="file"] {
+  display: none;
+}
+
+.member-import-preview {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+}
+
+.member-import-file,
+.member-import-preview .form-note {
+  margin: 0;
+}
+
+.member-import-file {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.member-import-file strong {
+  margin-left: 6px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.member-import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.member-import-summary span {
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: #f1f4f7;
+  color: #627181;
+  font-size: 12px;
+}
+
+.member-import-summary b {
+  margin-left: 4px;
+  color: var(--ink);
+}
+
+.member-import-summary .has-errors,
+.member-import-errors {
+  color: #a8443d;
+}
+
+.member-import-errors {
+  max-height: 130px;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid #f0d0cc;
+  border-radius: 10px;
+  background: #fff8f7;
+  font-size: 12px;
+}
+
+.member-import-errors p {
+  margin: 6px 0 0;
+}
+
+.member-import-table-wrap {
+  max-height: min(38vh, 310px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.member-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.member-import-table th,
+.member-import-table td {
+  max-width: 220px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.member-import-table th {
+  position: sticky;
+  top: 0;
+  background: #f7f9fb;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.member-import-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.member-import-table tr.invalid td {
+  background: #fff8f7;
+}
+
 @media (max-width: 800px) {
   .sidebar {
     background: #fff;
+  }
+
+  .member-import-tools {
+    flex-wrap: wrap;
+    justify-content: stretch;
+    padding: 0 14px 14px;
+  }
+
+  .member-import-tools .button {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .member-import-preview {
+    padding-inline: 16px;
+  }
+
+  .member-import-table th,
+  .member-import-table td {
+    padding: 8px;
   }
 }

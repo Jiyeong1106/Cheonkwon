@@ -120,6 +120,16 @@ export async function createMember(member: Member): Promise<void> {
   await batch.commit();
 }
 
+export async function createMembers(members: Member[]): Promise<void> {
+  for (let start = 0; start < members.length; start += 450) {
+    const batch = writeBatch(db);
+    members.slice(start, start + 450).forEach(({ passes: _passes, ...member }) => {
+      batch.set(locationDocument("members", member.id), member);
+    });
+    await batch.commit();
+  }
+}
+
 export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "birthDate" | "memo">): Promise<void> {
   await updateDoc(locationDocument("members", member.id), {
     name: member.name,
