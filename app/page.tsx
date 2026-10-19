@@ -28,7 +28,6 @@ import {
   type Schedule,
   type Store,
 } from "@/lib/dojo-data";
-import styles from "./auth.module.css";
 
 type Dialog = "member" | "edit" | "pass" | "passEdit" | "schedule" | "help" | "notifications" | null;
 
@@ -71,7 +70,6 @@ function Icon({ name }: { name: string }) {
 
 export default function Home() {
   const [user,setUser]=useState<User|null>(null);
-  const [authReady,setAuthReady]=useState(DEMO_MODE);
   const [authPending,setAuthPending]=useState(false);
   const [authError,setAuthError]=useState("");
   const [store,setStore]=useState<Store>(defaultStore);
@@ -101,7 +99,7 @@ export default function Home() {
 
   useEffect(()=>{
     if(DEMO_MODE)return;
-    return onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}setAuthReady(true)});
+    return onAuthStateChanged(auth,(currentUser)=>{if(currentUser&&!isAdminEmail(currentUser.email)){setUser(null);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.");void signOut(auth).catch(()=>{})}else{setUser(currentUser);if(currentUser)setAuthError("")}});
   },[]);
   useEffect(()=>{ const date=today(); setCurrentDate(date); setAttendanceDate(date); setForm(f=>({...f,start:date,end:addMonths(date,Number(f.months))})); },[]);
   useEffect(()=>{
@@ -177,8 +175,7 @@ export default function Home() {
   const handleGoogleSignIn=async()=>{setAuthPending(true);setAuthError("");try{const result=await signInWithPopup(auth,new GoogleAuthProvider());if(!isAdminEmail(result.user.email)){await signOut(auth);setAuthError("관리자로 등록된 Google 계정만 이용할 수 있어요.")}}catch(error){const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";if(code==="auth/popup-closed-by-user"){return}setAuthError(code==="auth/unauthorized-domain"?"Firebase Authentication의 승인된 도메인에 이 사이트를 추가해 주세요.":code==="auth/popup-blocked"?"브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.":"Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.")}finally{setAuthPending(false)}};
   const handleSignOut=async()=>{setProfileMenuOpen(false);try{await signOut(auth)}catch{setToast("로그아웃에 실패했어요. 다시 시도해 주세요.")}};
 
-  if(!authReady)return <div className={styles.screen}><div className={styles.card}><div className={styles.mark}>천</div><p>인증 상태를 확인하고 있어요…</p></div></div>;
-  if(!DEMO_MODE&&!user)return <main className={styles.screen}><section className={styles.card}><div className={styles.mark}>천</div><p className={styles.eyebrow}>CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className={styles.description}>관리자 Google 계정으로 로그인해 주세요.</p><button className={styles.googleButton} onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><span className={styles.googleG} aria-hidden="true">G</span>{authPending?"로그인 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className={styles.error} role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className={styles.error} role="alert">{authError}</p>}</section></main>;
+  if(!DEMO_MODE&&!user)return <main className="auth-screen"><section className="auth-card"><div className="auth-mark">천</div><p className="auth-eyebrow">CHEONKWON TAEKWONDO</p><h1>천권태권도장 관리자</h1><p className="auth-description">회원과 출석 정보를 관리하려면<br/>관리자 Google 계정으로 로그인해 주세요.</p><button className="auth-google-button" onClick={handleGoogleSignIn} disabled={authPending||ADMIN_EMAILS.length===0}><svg className="auth-google-icon" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.46 13.72 17.74 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.9c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.38 37.93 46.98 31.84 46.98 24.55Z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.88.93 7.55 2.56 10.78l7.97-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.44-4.89 2.3-8.17 2.3-6.26 0-11.55-4.22-13.45-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>{authPending?"Google 계정 연결 중…":"Google 계정으로 로그인"}</button>{ADMIN_EMAILS.length===0&&<p className="auth-error" role="alert">관리자 이메일 설정이 필요합니다.</p>}{authError&&<p className="auth-error" role="alert">{authError}</p>}<p className="auth-footnote"><Icon name="shield"/> 등록된 관리자 계정만 접근할 수 있습니다.</p></section></main>;
 
   const pageTitle=view==="dashboard"?"대시보드":view==="members"?"회원 관리":view==="attendance"?"출석 체크":"회원 상세";
   const breadcrumb=<div className="breadcrumb"><button onClick={()=>go("dashboard")}>천권태권도</button>{view!=="dashboard"&&<><span>/</span>{view==="detail"?<><button onClick={()=>go("members")}>회원목록</button><span>/</span><span>회원상세</span></>:<span>{view==="attendance"?"출석 체크":"회원목록"}</span>}</>}</div>;
