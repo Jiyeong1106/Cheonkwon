@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -107,8 +107,12 @@ function Icon({ name }: { name: string }) {
   return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.grid}/></svg>;
 }
 
-export default function ManagementApp({ segments }: { segments: string[] }) {
+export default function ManagementApp() {
   const router=useRouter();
+  const pathname=usePathname();
+  const segments=useMemo(()=>pathname.split("/").slice(2).filter(Boolean).map(segment=>{
+    try{return decodeURIComponent(segment)}catch{return segment}
+  }),[pathname]);
   const section=segments[0];
   const view: "dashboard"|"members"|"attendance"|"detail" = !section?"dashboard":section==="members"?(segments[1]?"detail":"members"):section==="attendance"?"attendance":"dashboard";
   const selected=view==="detail"?segments[1]??null:null;
