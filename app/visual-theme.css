@@ -240,7 +240,25 @@ body {
   margin-top: 11px;
 }
 
+.attendance-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attendance-cancel-button {
+  height: 35px;
+}
+
 @media (max-width: 600px) {
+  .attendance-summary-actions {
+    width: 100%;
+  }
+
+  .attendance-summary-actions .attendance-search {
+    flex: 1;
+  }
+
   .attendance-card-actions {
     gap: 5px;
   }
