@@ -258,6 +258,43 @@ export async function toggleAttendance(
   });
 }
 
+export async function recordKioskAttendance(
+  record: Pick<Attendance, "memberId" | "date" | "passId"> & { activatePass?: boolean },
+  time: string,
+): Promise<{ status: "recorded" | "already-recorded"; pass: Pass }> {
+  const attendanceRef = locationDocument("attendance", attendanceDocumentId(record.memberId, record.date));
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(attendanceRef);
+    const current = snapshot.exists() ? snapshot.data() as Omit<Attendance, "id"> : null;
+    const currentSessions = current?.sessions ?? [];
+    const passRef = locationDocument("passes", current?.passId ?? record.passId);
+    const passSnapshot = await transaction.get(passRef);
+    if (!passSnapshot.exists()) throw new Error("이용권 정보를 찾지 못했어요.");
+    const pass = { ...passSnapshot.data(), id: passSnapshot.id } as Pass;
+    if (currentSessions.includes(time)) return { status: "already-recorded", pass };
+
+    transaction.set(attendanceRef, {
+      memberId: record.memberId,
+      date: record.date,
+      passId: current?.passId ?? record.passId,
+      sessions: [...currentSessions, time].sort(),
+    });
+
+    const shouldActivate = pass.activatedAt === null
+      || (pass.activatedAt === undefined && record.activatePass && pass.id === record.passId);
+    if (shouldActivate) {
+      const activation = {
+        start: record.date,
+        end: addPassDays(record.date, Number(pass.months) || 1),
+        activatedAt: record.date,
+      };
+      transaction.update(passRef, activation);
+      return { status: "recorded", pass: { ...pass, ...activation } };
+    }
+    return { status: "recorded", pass };
+  });
+}
+
 export async function deleteAttendanceForDate(date: string): Promise<number> {
   const snapshot = await getDocs(query(locationCollection("attendance"), where("date", "==", date)));
   for (let start = 0; start < snapshot.docs.length; start += 450) {
