@@ -15,7 +15,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited" };
+export type HoldPeriod = { id: string; start: string; end?: string };
+export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited"; activatedAt?: string | null; holds?: HoldPeriod[] };
 export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[] };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
 export type Schedule = { id: string; day: number; time: string; effectiveFrom?: string; effectiveTo?: string };
@@ -35,6 +36,20 @@ const previousDate = (date: string) => {
   const previous = new Date(Date.UTC(year, month - 1, day - 1));
   return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}-${String(previous.getUTCDate()).padStart(2, "0")}`;
 };
+const addPassDays = (date: string, months: number) => {
+  const [year, month, day] = date.split("-").map(Number);
+  const end = new Date(Date.UTC(year, month - 1, day + months * 30));
+  return `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(end.getUTCDate()).padStart(2, "0")}`;
+};
+const initializeLegacyPassActivation = async (passId: string, activatedAt: string | null) => {
+  const reference = locationDocument("passes", passId);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (snapshot.exists() && !("activatedAt" in snapshot.data())) {
+      transaction.update(reference, { activatedAt });
+    }
+  });
+};
 
 export function schedulesForDate(schedules: Schedule[], date: string): Schedule[] {
   return schedules
@@ -49,6 +64,7 @@ export function watchDojoStore(onChange: (store: Store) => void, onError: (error
   let attendance: Attendance[] = [];
   let schedules: Schedule[] = [];
   const ready = new Set<string>();
+  const activationMigrations = new Set<string>();
 
   const publish = () => {
     if (ready.size !== 4) return;
@@ -57,7 +73,20 @@ export function watchDojoStore(onChange: (store: Store) => void, onError: (error
         ...member,
         passes: passes
           .filter((pass) => pass.memberId === member.id)
-          .map(({ memberId: _memberId, ...pass }) => pass)
+          .map(({ memberId: _memberId, ...pass }) => {
+            if (pass.activatedAt !== undefined) return pass;
+            const firstAttendance = attendance
+              .filter((record) => record.passId === pass.id)
+              .map((record) => record.date)
+              .sort()[0];
+            const activatedAt = firstAttendance ?? null;
+            if (!activationMigrations.has(pass.id)) {
+              activationMigrations.add(pass.id);
+              void initializeLegacyPassActivation(pass.id, activatedAt)
+                .catch(() => activationMigrations.delete(pass.id));
+            }
+            return { ...pass, activatedAt };
+          })
           .sort((a, b) => b.start.localeCompare(a.start)),
       })),
       attendance,
@@ -121,13 +150,43 @@ export async function createMember(member: Member): Promise<void> {
 }
 
 export async function createMembers(members: Member[]): Promise<void> {
-  for (let start = 0; start < members.length; start += 450) {
+  let batch = writeBatch(db);
+  let operations = 0;
+
+  for (const member of members) {
+    const requiredOperations = 1 + member.passes.length;
+    if (operations && operations + requiredOperations > 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      operations = 0;
+    }
+    const { passes, ...profile } = member;
+    batch.set(locationDocument("members", member.id), profile);
+    passes.forEach((pass) => batch.set(locationDocument("passes", pass.id), { ...pass, memberId: member.id }));
+    operations += requiredOperations;
+  }
+
+  if (operations) await batch.commit();
+}
+
+export async function deleteMemberData(memberId: string): Promise<{ passes: number; attendance: number }> {
+  const [passesSnapshot, attendanceSnapshot] = await Promise.all([
+    getDocs(query(locationCollection("passes"), where("memberId", "==", memberId))),
+    getDocs(query(locationCollection("attendance"), where("memberId", "==", memberId))),
+  ]);
+
+  const relatedRefs = [
+    ...passesSnapshot.docs.map((item) => item.ref),
+    ...attendanceSnapshot.docs.map((item) => item.ref),
+  ];
+  for (let start = 0; start < relatedRefs.length; start += 450) {
     const batch = writeBatch(db);
-    members.slice(start, start + 450).forEach(({ passes: _passes, ...member }) => {
-      batch.set(locationDocument("members", member.id), member);
-    });
+    relatedRefs.slice(start, start + 450).forEach((reference) => batch.delete(reference));
     await batch.commit();
   }
+
+  await deleteDoc(locationDocument("members", memberId));
+  return { passes: passesSnapshot.size, attendance: attendanceSnapshot.size };
 }
 
 export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "birthDate" | "memo">): Promise<void> {
@@ -154,14 +213,23 @@ export async function updatePass(pass: Pass): Promise<void> {
   });
 }
 
+export async function updatePassHolds(passId: string, end: string, holds: HoldPeriod[]): Promise<void> {
+  await updateDoc(locationDocument("passes", passId), {
+    end,
+    holds: holds.map((hold) => hold.end ? { id: hold.id, start: hold.start, end: hold.end } : { id: hold.id, start: hold.start }),
+  });
+}
+
 export async function toggleAttendance(
-  record: Pick<Attendance, "memberId" | "date" | "passId">,
+  record: Pick<Attendance, "memberId" | "date" | "passId"> & { activatePass?: boolean },
   time: string,
 ): Promise<void> {
   const attendanceRef = locationDocument("attendance", attendanceDocumentId(record.memberId, record.date));
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(attendanceRef);
     const current = snapshot.exists() ? snapshot.data() as Omit<Attendance, "id"> : null;
+    const passRef = locationDocument("passes", current?.passId ?? record.passId);
+    const passSnapshot = await transaction.get(passRef);
     const sessions = current?.sessions ?? [];
     const nextSessions = sessions.includes(time)
       ? sessions.filter((session) => session !== time)
@@ -178,6 +246,15 @@ export async function toggleAttendance(
       passId: current?.passId ?? record.passId,
       sessions: nextSessions,
     });
+
+    const pass = passSnapshot.data();
+    if (pass && (pass.activatedAt === null || (record.activatePass && (current?.passId ?? record.passId) === record.passId))) {
+      transaction.update(passRef, {
+        start: record.date,
+        end: addPassDays(record.date, Number(pass.months) || 1),
+        activatedAt: record.date,
+      });
+    }
   });
 }
 

@@ -19,6 +19,10 @@ body {
   background: #fff;
 }
 
+.sidebar .nav-label {
+  margin-top: 24px;
+}
+
 .topbar {
   background: #fff;
 }
@@ -196,6 +200,184 @@ body {
   color: #7188a0;
 }
 
+.member-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.danger-icon {
+  color: #a6554d;
+}
+
+.danger-icon:hover:not(:disabled) {
+  background: #fff1ef;
+  border-color: #f1ddda;
+}
+
+.danger-icon:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.member-meta-simple {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.attendance-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.compact-session-chips {
+  flex-wrap: nowrap;
+  margin: 0;
+}
+
+.attendance-card .attendee-foot {
+  margin-top: 11px;
+}
+
+@media (max-width: 600px) {
+  .attendance-card-actions {
+    gap: 5px;
+  }
+
+  .compact-session-chips {
+    gap: 4px;
+  }
+
+  .compact-session-chips .session-chip {
+    padding: 0 7px;
+  }
+}
+
+.expiring-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.month-picker {
+  min-width: 142px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.expiring-more {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pass-history-table {
+  min-width: 900px;
+}
+
+.hold-history-row td {
+  padding: 10px 14px;
+  background: #f7f9fb;
+  text-align: left;
+  white-space: normal;
+}
+
+.hold-history-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  color: #657382;
+  font-size: 12px;
+}
+
+.hold-history-content strong {
+  color: var(--blue-dark);
+  font-weight: 700;
+}
+
+.hold-history-content label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hold-end-input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.hold-open-label {
+  color: var(--blue-dark);
+  font-weight: 600;
+}
+
+.hold-delete-button {
+  margin-left: auto;
+  color: #a6554d;
+  font-size: 12px;
+}
+
+.hold-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.hold-toggle {
+  min-width: 76px;
+  height: 32px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.delete-member-content > p:first-child,
+.delete-hold-content > p:first-child {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.delete-hold-content > p:first-child {
+  margin-bottom: 20px;
+}
+
+.delete-member-warning {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #f1ddda;
+  border-radius: 9px;
+  background: #fff9f8;
+  color: #9a514b;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.delete-member-content .form-field b {
+  color: #a6554d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.delete-confirm-input.invalid {
+  border-color: #e6b8b3;
+  background: #fffafa;
+}
+
+.delete-confirm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .member-import-tools {
   display: flex;
   justify-content: flex-end;
@@ -316,6 +498,10 @@ body {
     padding: 0 14px 14px;
   }
 
+  .member-meta-simple {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .member-import-tools .button {
     flex: 1 1 140px;
     justify-content: center;
@@ -323,6 +509,15 @@ body {
 
   .member-import-preview {
     padding-inline: 16px;
+  }
+
+  .expiring-panel .panel-heading {
+    align-items: flex-start;
+  }
+
+  .expiring-tools {
+    align-items: flex-end;
+    flex-direction: column;
   }
 
   .member-import-table th,
