@@ -15,10 +15,11 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { addPassDays, correctedLegacyPassEnd } from "@/lib/pass-period";
+import { validRank, type MemberRank, type RankSource } from "@/lib/member-rank";
 
 export type HoldPeriod = { id: string; start: string; end?: string };
 export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited"; activatedAt?: string | null; holds?: HoldPeriod[]; periodIncludesStart?: boolean };
-export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[] };
+export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[]; rank?: MemberRank | null; rankSource?: RankSource | null };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
 export type Schedule = { id: string; day: number; time: string; effectiveFrom?: string; effectiveTo?: string };
 export type Store = { members: Member[]; attendance: Attendance[]; schedules: Schedule[] };
@@ -218,12 +219,18 @@ export async function deleteMemberData(memberId: string): Promise<{ passes: numb
   return { passes: passesSnapshot.size, attendance: attendanceSnapshot.size };
 }
 
-export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "birthDate" | "memo">): Promise<void> {
-  await updateDoc(locationDocument("members", member.id), {
-    name: member.name,
-    phone: member.phone,
-    birthDate: member.birthDate ?? "",
-    memo: member.memo,
+export async function updateMember(member: Pick<Member, "id" | "name" | "phone" | "birthDate" | "memo" | "rank">): Promise<void> {
+  if (member.rank && !validRank(member.rank)) throw new Error("띠와 보유 단수를 확인해 주세요.");
+  const reference = locationDocument("members", member.id);
+  await runTransaction(db, async transaction => {
+    const current = await transaction.get(reference);
+    if (!current.exists()) throw new Error("회원 정보를 찾지 못했어요.");
+    const rankChanged = "rank" in member && JSON.stringify(current.data().rank ?? null) !== JSON.stringify(member.rank ?? null);
+    transaction.update(reference, {
+      name: member.name, phone: member.phone, birthDate: member.birthDate ?? "", memo: member.memo,
+      ...("rank" in member ? { rank: member.rank ?? null } : {}),
+      ...(rankChanged ? { rankSource: null } : {}),
+    });
   });
 }
 
