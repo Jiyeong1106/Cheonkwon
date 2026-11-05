@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { addPassDays } from "@/lib/pass-period";
 import {
   recordKioskAttendance,
   watchDojoStore,
@@ -33,7 +34,6 @@ const koreaNow = () => {
   return { date, time, minutes: Number(parts.hour) * 60 + Number(parts.minute) };
 };
 
-const addPassDays = (date: string, months: number) => { const [year, month, day] = date.split("-").map(Number); const next = new Date(Date.UTC(year, month - 1, day + months * 30)); return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`; };
 const passEndDate = (pass: Pass) => pass.end || addPassDays(pass.start, pass.months);
 const passPending = (pass: Pass) => pass.activatedAt === null;
 const isPassOnHold = (pass: Pass, date: string) => (pass.holds ?? []).some((hold) => hold.start <= date && (!hold.end || hold.end > date));
@@ -100,9 +100,6 @@ export default function CheckInApp() {
     };
   }, [feedback]);
 
-  // Temporary kiosk testing: always record the 19:00 class.
-  const session = { time: "19:00" };
-
   const addDigit = (digit: string) => {
     if (submitting || feedback?.type === "success") return;
     setFeedback(null);
@@ -155,14 +152,14 @@ export default function CheckInApp() {
     }
     setSubmitting(true);
     try {
-      const result = await recordKioskAttendance({ memberId: member.id, date: checkInDate, passId: pass.id, activatePass: passPending(pass) }, session.time);
+      const result = await recordKioskAttendance({ memberId: member.id, date: checkInDate, passId: pass.id, activatePass: passPending(pass) });
       const savedAllowance = passAllowance(result.pass);
       // Count today's attendance exactly once, including repeat check-ins and additional classes.
       const usedAfterCheckIn = store.attendance.filter((record) => record.passId === result.pass.id && record.date !== checkInDate).length + 1;
       setFeedback({
         type: "success",
         title: result.status === "already-recorded" ? `${member.name}님은 이미 출석 완료했어요` : `${member.name}님, 출석 완료!`,
-        detail: `${session.time} 수업 출석이 확인되었습니다.`,
+        detail: "오늘 출석이 확인되었습니다.",
         expiresAt: passEndDate(result.pass),
         remaining: savedAllowance === null ? null : Math.max(0, savedAllowance - usedAfterCheckIn),
       });

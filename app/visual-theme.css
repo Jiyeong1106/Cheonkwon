@@ -231,6 +231,17 @@ body {
   margin-left: auto;
 }
 
+.daily-attendance-button {
+  height: 32px;
+  min-width: 82px;
+  font-size: 12px;
+}
+
+.daily-attendance-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .compact-session-chips {
   flex-wrap: nowrap;
   margin: 0;

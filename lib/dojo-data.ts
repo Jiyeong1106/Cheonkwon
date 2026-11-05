@@ -14,6 +14,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { addPassDays } from "@/lib/pass-period";
 
 export type HoldPeriod = { id: string; start: string; end?: string };
 export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited"; activatedAt?: string | null; holds?: HoldPeriod[] };
@@ -35,11 +36,6 @@ const previousDate = (date: string) => {
   const [year, month, day] = date.split("-").map(Number);
   const previous = new Date(Date.UTC(year, month - 1, day - 1));
   return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}-${String(previous.getUTCDate()).padStart(2, "0")}`;
-};
-const addPassDays = (date: string, months: number) => {
-  const [year, month, day] = date.split("-").map(Number);
-  const end = new Date(Date.UTC(year, month - 1, day + months * 30));
-  return `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, "0")}-${String(end.getUTCDate()).padStart(2, "0")}`;
 };
 const initializeLegacyPassActivation = async (passId: string, activatedAt: string | null) => {
   const reference = locationDocument("passes", passId);
@@ -220,35 +216,32 @@ export async function updatePassHolds(passId: string, end: string, holds: HoldPe
   });
 }
 
-export async function toggleAttendance(
+export async function setDailyAttendance(
   record: Pick<Attendance, "memberId" | "date" | "passId"> & { activatePass?: boolean },
-  time: string,
+  present: boolean,
 ): Promise<void> {
   const attendanceRef = locationDocument("attendance", attendanceDocumentId(record.memberId, record.date));
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(attendanceRef);
-    const current = snapshot.exists() ? snapshot.data() as Omit<Attendance, "id"> : null;
-    const passRef = locationDocument("passes", current?.passId ?? record.passId);
-    const passSnapshot = await transaction.get(passRef);
-    const sessions = current?.sessions ?? [];
-    const nextSessions = sessions.includes(time)
-      ? sessions.filter((session) => session !== time)
-      : [...sessions, time].sort();
-
-    if (nextSessions.length === 0) {
+    if (!present) {
       if (snapshot.exists()) transaction.delete(attendanceRef);
       return;
     }
+    if (snapshot.exists()) return;
+    const current = snapshot.exists() ? snapshot.data() as Omit<Attendance, "id"> : null;
+    const passRef = locationDocument("passes", current?.passId ?? record.passId);
+    const passSnapshot = await transaction.get(passRef);
+    if (!passSnapshot.exists()) throw new Error("이용권 정보를 찾지 못했어요.");
 
     transaction.set(attendanceRef, {
       memberId: record.memberId,
       date: record.date,
       passId: current?.passId ?? record.passId,
-      sessions: nextSessions,
+      sessions: [],
     });
 
     const pass = passSnapshot.data();
-    if (pass && (pass.activatedAt === null || (record.activatePass && (current?.passId ?? record.passId) === record.passId))) {
+    if (pass && (pass.activatedAt === null || (pass.activatedAt === undefined && record.activatePass))) {
       transaction.update(passRef, {
         start: record.date,
         end: addPassDays(record.date, Number(pass.months) || 1),
@@ -260,24 +253,22 @@ export async function toggleAttendance(
 
 export async function recordKioskAttendance(
   record: Pick<Attendance, "memberId" | "date" | "passId"> & { activatePass?: boolean },
-  time: string,
 ): Promise<{ status: "recorded" | "already-recorded"; pass: Pass }> {
   const attendanceRef = locationDocument("attendance", attendanceDocumentId(record.memberId, record.date));
   return runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(attendanceRef);
     const current = snapshot.exists() ? snapshot.data() as Omit<Attendance, "id"> : null;
-    const currentSessions = current?.sessions ?? [];
     const passRef = locationDocument("passes", current?.passId ?? record.passId);
     const passSnapshot = await transaction.get(passRef);
     if (!passSnapshot.exists()) throw new Error("이용권 정보를 찾지 못했어요.");
     const pass = { ...passSnapshot.data(), id: passSnapshot.id } as Pass;
-    if (currentSessions.includes(time)) return { status: "already-recorded", pass };
+    if (snapshot.exists()) return { status: "already-recorded", pass };
 
     transaction.set(attendanceRef, {
       memberId: record.memberId,
       date: record.date,
       passId: current?.passId ?? record.passId,
-      sessions: [...currentSessions, time].sort(),
+      sessions: [],
     });
 
     const shouldActivate = pass.activatedAt === null
