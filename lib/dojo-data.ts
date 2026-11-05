@@ -14,10 +14,10 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { addPassDays } from "@/lib/pass-period";
+import { addPassDays, correctedLegacyPassEnd } from "@/lib/pass-period";
 
 export type HoldPeriod = { id: string; start: string; end?: string };
-export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited"; activatedAt?: string | null; holds?: HoldPeriod[] };
+export type Pass = { id: string; start: string; end?: string; months: number; weekly: number | "unlimited"; activatedAt?: string | null; holds?: HoldPeriod[]; periodIncludesStart?: boolean };
 export type Member = { id: string; name: string; phone: string; birthDate?: string; memo: string; created: string; passes: Pass[] };
 export type Attendance = { id: string; memberId: string; date: string; passId: string; sessions: string[] };
 export type Schedule = { id: string; day: number; time: string; effectiveFrom?: string; effectiveTo?: string };
@@ -47,6 +47,26 @@ const initializeLegacyPassActivation = async (passId: string, activatedAt: strin
   });
 };
 
+async function migrateLegacyPassPeriod(passId: string): Promise<void> {
+  const reference = locationDocument("passes", passId);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) return;
+    const pass = snapshot.data() as Pass;
+    if (pass.periodIncludesStart) return;
+    const end = correctedLegacyPassEnd(pass);
+    transaction.update(reference, {
+      ...(end ? { end } : {}),
+      periodIncludesStart: true,
+      periodMigration: {
+        previousEnd: pass.end ?? null,
+        corrected: end !== undefined,
+        migratedAt: serverTimestamp(),
+      },
+    });
+  });
+}
+
 export function schedulesForDate(schedules: Schedule[], date: string): Schedule[] {
   return schedules
     .filter((schedule) => (!schedule.effectiveFrom || schedule.effectiveFrom <= date)
@@ -61,9 +81,22 @@ export function watchDojoStore(onChange: (store: Store) => void, onError: (error
   let schedules: Schedule[] = [];
   const ready = new Set<string>();
   const activationMigrations = new Set<string>();
+  const periodMigrations = new Set<string>();
 
   const publish = () => {
     if (ready.size !== 4) return;
+    const legacyPasses = passes.filter(pass => !pass.periodIncludesStart);
+    if (legacyPasses.length) {
+      legacyPasses.forEach(pass => {
+        if (periodMigrations.has(pass.id)) return;
+        periodMigrations.add(pass.id);
+        void migrateLegacyPassPeriod(pass.id).catch(error => {
+          periodMigrations.delete(pass.id);
+          onError(error instanceof Error ? error : new Error("기존 이용권 기간을 보정하지 못했어요."));
+        });
+      });
+      return;
+    }
     onChange({
       members: members.map((member) => ({
         ...member,
@@ -141,7 +174,7 @@ export async function createMember(member: Member): Promise<void> {
   const batch = writeBatch(db);
   const { passes, ...profile } = member;
   batch.set(locationDocument("members", member.id), profile);
-  passes.forEach((pass) => batch.set(locationDocument("passes", pass.id), { ...pass, memberId: member.id }));
+  passes.forEach((pass) => batch.set(locationDocument("passes", pass.id), { ...pass, memberId: member.id, periodIncludesStart: true }));
   await batch.commit();
 }
 
@@ -158,7 +191,7 @@ export async function createMembers(members: Member[]): Promise<void> {
     }
     const { passes, ...profile } = member;
     batch.set(locationDocument("members", member.id), profile);
-    passes.forEach((pass) => batch.set(locationDocument("passes", pass.id), { ...pass, memberId: member.id }));
+    passes.forEach((pass) => batch.set(locationDocument("passes", pass.id), { ...pass, memberId: member.id, periodIncludesStart: true }));
     operations += requiredOperations;
   }
 
@@ -196,7 +229,7 @@ export async function updateMember(member: Pick<Member, "id" | "name" | "phone" 
 
 export async function createPass(memberId: string, pass: Pass): Promise<void> {
   await writeBatch(db)
-    .set(locationDocument("passes", pass.id), { ...pass, memberId })
+    .set(locationDocument("passes", pass.id), { ...pass, memberId, periodIncludesStart: true })
     .commit();
 }
 
@@ -206,6 +239,7 @@ export async function updatePass(pass: Pass): Promise<void> {
     end: pass.end ?? null,
     months: pass.months,
     weekly: pass.weekly,
+    periodIncludesStart: true,
   });
 }
 
@@ -246,6 +280,7 @@ export async function setDailyAttendance(
         start: record.date,
         end: addPassDays(record.date, Number(pass.months) || 1),
         activatedAt: record.date,
+        periodIncludesStart: true,
       });
     }
   });
@@ -278,6 +313,7 @@ export async function recordKioskAttendance(
         start: record.date,
         end: addPassDays(record.date, Number(pass.months) || 1),
         activatedAt: record.date,
+        periodIncludesStart: true,
       };
       transaction.update(passRef, activation);
       return { status: "recorded", pass: { ...pass, ...activation } };

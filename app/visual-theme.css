@@ -242,6 +242,99 @@ body {
   opacity: 0.6;
 }
 
+.daily-attendance-card {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-color: #e3e9f0;
+  border-radius: 11px;
+  background: #fff;
+  transition: border-color .15s, background .15s;
+}
+
+.daily-attendance-card:hover {
+  border-color: #bed0e2;
+}
+
+.daily-attendance-card.is-present {
+  border-color: #d9e5f0;
+  background: #f9fbfe;
+}
+
+.daily-attendance-card .person-cell {
+  min-width: 0;
+}
+
+.daily-attendance-card .person-cell strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.daily-attendance-card .person-cell small {
+  margin-top: 3px;
+  color: #8996a3;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.attendance-inline-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.attendance-inline-meta > span {
+  white-space: nowrap;
+}
+
+.attendance-pass-label {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #eef3f9;
+  color: #567596;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.attendance-inline-meta b {
+  color: #536b82;
+  font-weight: 650;
+}
+
+.daily-attendance-card .attendance-card-actions {
+  margin-left: 0;
+}
+
+.attendance-column {
+  container-type: inline-size;
+}
+
+@container (max-width: 380px) {
+  .daily-attendance-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 12px;
+    padding: 12px;
+  }
+
+  .daily-attendance-card .attendance-inline-meta {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .daily-attendance-card .attendance-card-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
 .compact-session-chips {
   flex-wrap: nowrap;
   margin: 0;
